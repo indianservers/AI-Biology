@@ -106,6 +106,74 @@
                     android:layout_gravity="center"
                     android:indeterminateTint="#55E7D0"
                     android:visibility="gone" />
+
+                <HorizontalScrollView
+                    android:layout_width="wrap_content"
+                    android:layout_height="56dp"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_control_rail"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/viewerControls"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:paddingStart="6dp"
+                        android:paddingEnd="6dp">
+
+                        <TextView
+                            android:id="@+id/rotateLeftButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Rotate left"
+                            android:tooltipText="Rotate left"
+                            android:text="↶" />
+
+                        <TextView
+                            android:id="@+id/rotationButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Pause automatic rotation"
+                            android:tooltipText="Pause automatic rotation"
+                            android:text="Ⅱ" />
+
+                        <TextView
+                            android:id="@+id/rotateRightButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Rotate right"
+                            android:tooltipText="Rotate right"
+                            android:text="↷" />
+
+                        <TextView
+                            android:id="@+id/zoomOutButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Zoom out"
+                            android:tooltipText="Zoom out"
+                            android:text="−" />
+
+                        <TextView
+                            android:id="@+id/zoomInButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Zoom in"
+                            android:tooltipText="Zoom in"
+                            android:text="+" />
+
+                        <TextView
+                            android:id="@+id/resetViewButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Reset view"
+                            android:tooltipText="Reset view"
+                            android:text="⌂" />
+
+                        <TextView
+                            android:id="@+id/fullScreenButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Open full screen"
+                            android:tooltipText="Open full screen"
+                            android:text="⛶" />
+                    </LinearLayout>
+                </HorizontalScrollView>
             </FrameLayout>
 
             <TextView
@@ -191,4 +259,52 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
         </LinearLayout>
     </ScrollView>
+
+    <FrameLayout
+        android:id="@+id/fullScreenOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#010815"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <FrameLayout
+            android:id="@+id/fullScreenViewerHost"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_gravity="top"
+            android:background="#CC031326"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="18dp"
+            android:paddingEnd="10dp">
+
+            <TextView
+                android:id="@+id/fullScreenTitle"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:maxLines="1"
+                android:textColor="#FFFFFF"
+                android:textSize="19sp"
+                android:textStyle="bold"
+                tools:text="Bacteria Cell" />
+
+            <TextView
+                android:id="@+id/fullScreenClose"
+                style="@style/BiologyViewerControl"
+                android:contentDescription="Close full screen"
+                android:tooltipText="Close full screen"
+                android:text="×"
+                android:textSize="30sp" />
+        </LinearLayout>
+    </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

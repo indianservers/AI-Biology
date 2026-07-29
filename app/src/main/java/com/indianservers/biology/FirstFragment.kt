@@ -19,6 +19,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
 import org.json.JSONArray
@@ -32,6 +36,11 @@ class FirstFragment : Fragment() {
     private val binding get() = _binding!!
     private var selectedModelIndex = 0
     private var selectedPartIndex = 0
+    private var isAutoRotating = true
+    private var isFullScreen = false
+    private var originalViewerParent: ViewGroup? = null
+    private var originalViewerIndex = -1
+    private var originalViewerLayoutParams: ViewGroup.LayoutParams? = null
     private lateinit var modelStorageDirectory: File
 
     override fun onCreateView(
@@ -48,11 +57,23 @@ class FirstFragment : Fragment() {
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
         configureViewer()
+        configureViewerControls()
         configureExpanders()
         configureModelStrip()
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : OnBackPressedCallback(false) {
+                override fun handleOnBackPressed() {
+                    exitFullScreen()
+                }
+            }.also { callback ->
+                binding.fullScreenOverlay.setTag(R.id.fullScreenOverlay, callback)
+            }
+        )
     }
 
     override fun onDestroyView() {
+        if (isFullScreen) exitFullScreen()
         binding.modelWebView.removeJavascriptInterface(BRIDGE_NAME)
         binding.modelWebView.destroy()
         super.onDestroyView()
@@ -113,6 +134,96 @@ class FirstFragment : Fragment() {
                         binding.contentScroll.requestDisallowInterceptTouchEvent(false)
                 }
                 false
+            }
+        }
+    }
+
+    private fun configureViewerControls() {
+        binding.rotateLeftButton.setOnClickListener { runViewerCommand("rotateBy(-30)") }
+        binding.rotateRightButton.setOnClickListener { runViewerCommand("rotateBy(30)") }
+        binding.zoomOutButton.setOnClickListener { runViewerCommand("zoomBy(1.2)") }
+        binding.zoomInButton.setOnClickListener { runViewerCommand("zoomBy(0.82)") }
+        binding.resetViewButton.setOnClickListener { runViewerCommand("resetView()") }
+        binding.rotationButton.setOnClickListener {
+            isAutoRotating = !isAutoRotating
+            updateRotationControl()
+            runViewerCommand("setAutoRotation($isAutoRotating)")
+        }
+        binding.fullScreenButton.setOnClickListener {
+            if (isFullScreen) exitFullScreen() else enterFullScreen()
+        }
+        binding.fullScreenClose.setOnClickListener { exitFullScreen() }
+    }
+
+    private fun updateRotationControl() {
+        binding.rotationButton.text = if (isAutoRotating) "Ⅱ" else "▶"
+        binding.rotationButton.contentDescription =
+            if (isAutoRotating) "Pause automatic rotation" else "Resume automatic rotation"
+        binding.rotationButton.tooltipText = binding.rotationButton.contentDescription
+    }
+
+    private fun runViewerCommand(command: String) {
+        binding.modelWebView.evaluateJavascript("window.$command", null)
+    }
+
+    private fun enterFullScreen() {
+        if (isFullScreen) return
+        val viewer = binding.viewerContainer
+        val parent = viewer.parent as? ViewGroup ?: return
+
+        originalViewerParent = parent
+        originalViewerIndex = parent.indexOfChild(viewer)
+        originalViewerLayoutParams = viewer.layoutParams
+        parent.removeView(viewer)
+        binding.fullScreenViewerHost.addView(
+            viewer,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        isFullScreen = true
+        binding.fullScreenTitle.text = MODEL_CATALOG[selectedModelIndex].title
+        binding.fullScreenButton.text = "×"
+        binding.fullScreenButton.contentDescription = "Close full screen"
+        binding.fullScreenButton.tooltipText = "Close full screen"
+        binding.fullScreenOverlay.visibility = View.VISIBLE
+        (binding.fullScreenOverlay.getTag(R.id.fullScreenOverlay) as? OnBackPressedCallback)
+            ?.isEnabled = true
+        setSystemBarsVisible(false)
+    }
+
+    private fun exitFullScreen() {
+        if (!isFullScreen || _binding == null) return
+        val viewer = binding.viewerContainer
+        binding.fullScreenViewerHost.removeView(viewer)
+        originalViewerParent?.addView(
+            viewer,
+            originalViewerIndex.coerceAtLeast(0),
+            originalViewerLayoutParams
+        )
+
+        isFullScreen = false
+        binding.fullScreenButton.text = "⛶"
+        binding.fullScreenButton.contentDescription = "Open full screen"
+        binding.fullScreenButton.tooltipText = "Open full screen"
+        binding.fullScreenOverlay.visibility = View.GONE
+        (binding.fullScreenOverlay.getTag(R.id.fullScreenOverlay) as? OnBackPressedCallback)
+            ?.isEnabled = false
+        setSystemBarsVisible(true)
+    }
+
+    private fun setSystemBarsVisible(visible: Boolean) {
+        val window = activity?.window ?: return
+        WindowCompat.setDecorFitsSystemWindows(window, visible)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (visible) {
+                show(WindowInsetsCompat.Type.systemBars())
+            } else {
+                hide(WindowInsetsCompat.Type.systemBars())
             }
         }
     }
@@ -250,6 +361,7 @@ class FirstFragment : Fragment() {
 
         configurePartList(model)
         selectPart(0, updateViewer = false)
+        binding.fullScreenTitle.text = model.title
         loadModel(model)
     }
 
@@ -307,6 +419,8 @@ class FirstFragment : Fragment() {
         }
 
         binding.modelProgress.visibility = if (available) View.VISIBLE else View.GONE
+        isAutoRotating = true
+        updateRotationControl()
         val query = buildString {
             append("file:///android_asset/model_viewer.html?")
             if (source != null) {

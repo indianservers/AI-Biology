@@ -162,6 +162,31 @@
         });
     };
 
+    window.setAutoRotation = function(enabled) {
+        viewer.autoRotate = Boolean(enabled);
+    };
+
+    window.rotateBy = function(degrees) {
+        const orbit = viewer.getCameraOrbit();
+        const nextTheta = orbit.theta + Number(degrees) * Math.PI / 180;
+        viewer.cameraOrbit = `${nextTheta}rad ${orbit.phi}rad ${orbit.radius}m`;
+        viewer.jumpCameraToGoal();
+    };
+
+    window.zoomBy = function(factor) {
+        const orbit = viewer.getCameraOrbit();
+        const nextRadius = Math.max(0.05, orbit.radius * Number(factor));
+        viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${nextRadius}m`;
+        viewer.jumpCameraToGoal();
+    };
+
+    window.resetView = function() {
+        viewer.cameraOrbit = "0deg 72deg auto";
+        viewer.cameraTarget = "auto auto auto";
+        viewer.fieldOfView = "auto";
+        viewer.jumpCameraToGoal();
+    };
+
     function escapeHtml(value) {
         const node = document.createElement("div");
         node.textContent = value;

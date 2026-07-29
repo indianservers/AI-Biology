@@ -2,6 +2,23 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val requiredBiologyModels = listOf(
+    "Bacteriacell.glb",
+    "Cell Membrane.glb",
+    "Chloroplast.glb",
+    "epithelial microvilli.glb",
+    "Lysosome.glb",
+    "Mitochondrion.glb",
+    "Neuron.glb",
+    "plant cell wall.glb",
+    "PlantCell.glb",
+    "Ribosomes.glb",
+    "Rough Endoplasmic Reticulum.glb",
+    "Smooth Endoplasmic Reticulum.glb",
+    "Vacuole.glb",
+    "WhiteBloodCell.glb"
+)
+
 android {
     namespace = "com.indianservers.biology"
     compileSdk {
@@ -51,4 +68,23 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+val verifyBundledBiologyModels by tasks.registering {
+    val modelDirectory = layout.projectDirectory.dir("src/main/assets/biology/3d")
+    inputs.dir(modelDirectory)
+
+    doLast {
+        val missingModels = requiredBiologyModels.filter { modelName ->
+            val modelFile = modelDirectory.file(modelName).asFile
+            !modelFile.isFile || modelFile.length() == 0L
+        }
+        check(missingModels.isEmpty()) {
+            "Cannot build without bundled biology models: ${missingModels.joinToString()}"
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(verifyBundledBiologyModels)
 }
