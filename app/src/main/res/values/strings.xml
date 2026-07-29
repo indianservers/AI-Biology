@@ -2,13 +2,13 @@
     <string name="app_name">Biology</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
-    <string name="first_fragment_label">First Fragment</string>
+    <string name="first_fragment_label">Biology Models</string>
     <string name="second_fragment_label">Second Fragment</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
     <string name="model_browser_title">Biology 3D Models</string>
-    <string name="model_browser_help">Drag to rotate. Pinch to zoom. Select another model from the list.</string>
-    <string name="selected_model">Selected: %1$s</string>
+    <string name="model_browser_help">Drag to rotate. Pinch to zoom. Cached models open instantly from local storage.</string>
+    <string name="selected_model">%1$s - %2$s</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris

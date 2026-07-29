@@ -54,11 +54,15 @@
 <script>
     const params = new URLSearchParams(window.location.search);
     const model = params.get("model");
+    const title = params.get("title");
+    const pending = params.get("pending");
     const viewer = document.getElementById("viewer");
     const message = document.getElementById("message");
 
     if (model) {
         viewer.src = `biology/3d/${model}`;
+    } else if (pending) {
+        message.innerHTML = `<strong>${title || pending}</strong><br><span>Model file is not cached yet.</span>`;
     } else {
         message.textContent = "Select a model to begin.";
     }

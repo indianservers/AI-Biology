@@ -10,8 +10,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
+import android.widget.SimpleAdapter
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
 
@@ -19,7 +18,6 @@ class FirstFragment : Fragment() {
 
     private var _binding: FragmentFirstBinding? = null
     private val binding get() = _binding!!
-    private var modelFiles: List<String> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -64,52 +62,69 @@ class FirstFragment : Fragment() {
     }
 
     private fun configureModelList() {
-        modelFiles = requireContext().assets
-            .list(MODEL_ASSET_DIRECTORY)
-            ?.filter { it.endsWith(".glb", ignoreCase = true) }
-            ?.sortedWith(String.CASE_INSENSITIVE_ORDER)
-            .orEmpty()
-
-        val modelNames = modelFiles.map(::displayName)
-        val adapter = ArrayAdapter(
+        val adapter = SimpleAdapter(
             requireContext(),
-            android.R.layout.simple_spinner_item,
-            modelNames
-        ).also {
-            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            MODEL_CATALOG.map { mapOf("title" to it.title, "subtitle" to it.subtitle) },
+            android.R.layout.simple_list_item_activated_2,
+            arrayOf("title", "subtitle"),
+            intArrayOf(android.R.id.text1, android.R.id.text2)
+        )
+
+        binding.modelList.adapter = adapter
+        binding.modelList.setOnItemClickListener { _, _, position, _ ->
+            loadModel(MODEL_CATALOG[position])
         }
 
-        binding.modelSpinner.adapter = adapter
-        binding.modelSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long
-            ) {
-                loadModel(modelFiles[position])
-            }
+        binding.modelList.setItemChecked(0, true)
+        loadModel(MODEL_CATALOG.first())
+    }
 
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
+    private fun loadModel(model: BiologyModel) {
+        binding.selectedModelText.text = getString(R.string.selected_model, model.title, model.subtitle)
 
-        if (modelFiles.isEmpty()) {
-            binding.selectedModelText.text = getString(R.string.selected_model, "No local models found")
+        if (isBundledModelAvailable(model.fileName)) {
+            binding.modelProgress.visibility = View.VISIBLE
+            binding.modelWebView.loadUrl(
+                "file:///android_asset/model_viewer.html?model=${Uri.encode(model.fileName)}"
+            )
+        } else {
+            binding.modelProgress.visibility = View.GONE
+            binding.modelWebView.loadUrl(
+                "file:///android_asset/model_viewer.html?pending=${Uri.encode(model.fileName)}" +
+                    "&title=${Uri.encode(model.title)}"
+            )
         }
     }
 
-    private fun loadModel(fileName: String) {
-        binding.selectedModelText.text = getString(R.string.selected_model, displayName(fileName))
-        binding.modelProgress.visibility = View.VISIBLE
-        binding.modelWebView.loadUrl("file:///android_asset/model_viewer.html?model=${Uri.encode(fileName)}")
-    }
-
-    private fun displayName(fileName: String): String =
-        fileName.substringBeforeLast('.')
-            .replace(Regex("(?<=[a-z])(?=[A-Z])"), " ")
-            .replaceFirstChar { it.uppercase() }
+    private fun isBundledModelAvailable(fileName: String): Boolean =
+        requireContext().assets
+            .list(MODEL_ASSET_DIRECTORY)
+            ?.contains(fileName) == true
 
     private companion object {
         const val MODEL_ASSET_DIRECTORY = "biology/3d"
+
+        val MODEL_CATALOG = listOf(
+            BiologyModel("Bacteriacell.glb", "Bacteria Cell", "prokaryotic cell structure"),
+            BiologyModel("Cell Membrane.glb", "Cell Membrane", "selective barrier and transport"),
+            BiologyModel("Chloroplast.glb", "Chloroplast", "photosynthesis organelle"),
+            BiologyModel("epithelial microvilli.glb", "Epithelial Microvilli", "surface absorption structures"),
+            BiologyModel("Lysosome.glb", "Lysosome", "cellular digestion vesicle"),
+            BiologyModel("Mitochondrion.glb", "Mitochondrion", "cell energy organelle"),
+            BiologyModel("Neuron.glb", "Neuron", "nerve impulse cell"),
+            BiologyModel("plant cell wall.glb", "Plant Cell Wall", "rigid plant cell support"),
+            BiologyModel("PlantCell.glb", "Plant Cell", "complete plant cell model"),
+            BiologyModel("Ribosomes.glb", "Ribosomes", "protein synthesis machinery"),
+            BiologyModel("Rough Endoplasmic Reticulum.glb", "Rough Endoplasmic Reticulum", "protein folding network"),
+            BiologyModel("Smooth Endoplasmic Reticulum.glb", "Smooth Endoplasmic Reticulum", "lipid synthesis network"),
+            BiologyModel("Vacuole.glb", "Vacuole", "storage and pressure compartment"),
+            BiologyModel("WhiteBloodCell.glb", "White Blood Cell", "immune defense cell")
+        )
     }
 }
+
+private data class BiologyModel(
+    val fileName: String,
+    val title: String,
+    val subtitle: String
+)
