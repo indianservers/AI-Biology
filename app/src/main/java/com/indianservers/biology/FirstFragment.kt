@@ -1,6 +1,7 @@
 package com.indianservers.biology
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -15,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -23,10 +25,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -42,6 +48,8 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import kotlin.math.roundToInt
+import kotlin.random.Random
 
 class FirstFragment : Fragment() {
 
@@ -55,6 +63,16 @@ class FirstFragment : Fragment() {
     private var isFullScreen = false
     private var showAllLabels = false
     private var identifyMode = true
+    private var currentMode = ExplorerMode.EXPLORE
+    private var modelDiscoveryExpanded = true
+    private var partsExpanded = true
+    private var quizModelIndex = -1
+    private var quizQuestionIndex = 0
+    private var quizScore = 0
+    private var quizSelectedAnswer: Int? = null
+    private var quizQuestions = emptyList<QuizQuestion>()
+    private val quizAwardedQuestions = mutableSetOf<Int>()
+    private val bookmarkedParts = mutableSetOf<String>()
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideFullScreenControls = Runnable { setFullScreenControlsVisible(false) }
     private val hideFullScreenHint = Runnable {
@@ -90,6 +108,8 @@ class FirstFragment : Fragment() {
         configureViewerControls()
         configureExpanders()
         configureModelDiscovery()
+        configureLearningModes()
+        restoreBookmarks()
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(false) {
@@ -412,10 +432,11 @@ class FirstFragment : Fragment() {
 
     private fun configureExpanders() {
         binding.modelSelectorHeader.setOnClickListener {
+            modelDiscoveryExpanded = !modelDiscoveryExpanded
             binding.modelDiscoveryPanel.visibility =
-                toggledVisibility(binding.modelDiscoveryPanel.visibility)
+                if (modelDiscoveryExpanded) View.VISIBLE else View.GONE
             val icon =
-                if (binding.modelDiscoveryPanel.visibility == View.VISIBLE) {
+                if (modelDiscoveryExpanded) {
                     R.drawable.ic_chevron_up
                 } else {
                     R.drawable.ic_chevron_down
@@ -424,17 +445,669 @@ class FirstFragment : Fragment() {
         }
 
         binding.partsHeader.setOnClickListener {
-            val nextVisibility = toggledVisibility(binding.partsList.visibility)
+            partsExpanded = !partsExpanded
+            val nextVisibility = if (partsExpanded) View.VISIBLE else View.GONE
             binding.partsList.visibility = nextVisibility
             binding.infoPanel.visibility = nextVisibility
             val icon =
-                if (nextVisibility == View.VISIBLE) {
+                if (partsExpanded) {
                     R.drawable.ic_chevron_up
                 } else {
                     R.drawable.ic_chevron_down
                 }
             binding.partsHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
         }
+    }
+
+    private fun configureLearningModes() {
+        binding.exploreTab.setOnClickListener { setLearningMode(ExplorerMode.EXPLORE) }
+        binding.learnTab.setOnClickListener { setLearningMode(ExplorerMode.LEARN) }
+        binding.quizTab.setOnClickListener { setLearningMode(ExplorerMode.QUIZ) }
+        binding.notesTab.setOnClickListener { setLearningMode(ExplorerMode.NOTES) }
+        binding.infoPanel.setOnClickListener { showPartBottomSheet() }
+        updateLearningTabs()
+    }
+
+    private fun setLearningMode(mode: ExplorerMode) {
+        if (currentMode == mode && mode == ExplorerMode.EXPLORE) return
+        if (isFullScreen) exitFullScreen()
+        currentMode = mode
+        updateLearningTabs()
+
+        val isExplore = mode == ExplorerMode.EXPLORE
+        binding.viewerContainer.visibility = if (isExplore) View.VISIBLE else View.GONE
+        binding.interactionHint.visibility = if (isExplore) View.VISIBLE else View.GONE
+        binding.modelSelectorHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
+        binding.modelDiscoveryPanel.visibility =
+            if (isExplore && modelDiscoveryExpanded) View.VISIBLE else View.GONE
+        binding.partsHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
+        binding.partsList.visibility =
+            if (isExplore && partsExpanded) View.VISIBLE else View.GONE
+        binding.infoPanel.visibility =
+            if (isExplore && partsExpanded) View.VISIBLE else View.GONE
+        binding.workflowPanel.visibility = if (isExplore) View.GONE else View.VISIBLE
+
+        if (isExplore) {
+            updateExploreAvailability()
+        } else {
+            renderActiveWorkflow()
+        }
+        binding.contentScroll.post { binding.contentScroll.smoothScrollTo(0, 0) }
+        binding.root.announceForAccessibility("${mode.title} mode")
+    }
+
+    private fun updateLearningTabs() {
+        val tabs = listOf(
+            binding.exploreTab to ExplorerMode.EXPLORE,
+            binding.learnTab to ExplorerMode.LEARN,
+            binding.quizTab to ExplorerMode.QUIZ,
+            binding.notesTab to ExplorerMode.NOTES
+        )
+        tabs.forEach { (tab, mode) ->
+            val selected = currentMode == mode
+            tab.background =
+                if (selected) requireContext().getDrawable(R.drawable.bg_filter_chip_selected)
+                else null
+            tab.setTextColor(if (selected) Color.WHITE else inactiveTextColor)
+            tab.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            tab.isSelected = selected
+        }
+    }
+
+    private fun renderActiveWorkflow() {
+        if (_binding == null || currentMode == ExplorerMode.EXPLORE) return
+        binding.workflowPanel.removeAllViews()
+        binding.modelAvailability.text = "${totalXp()} XP"
+        binding.modelAvailability.setTextColor(selectedTextColor)
+        when (currentMode) {
+            ExplorerMode.LEARN -> renderLearnMode()
+            ExplorerMode.QUIZ -> renderQuizMode()
+            ExplorerMode.NOTES -> renderNotesMode()
+            ExplorerMode.EXPLORE -> Unit
+        }
+    }
+
+    private fun renderLearnMode() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val lessonComplete = preferences().getBoolean(lessonKey(selectedModelIndex), false)
+        val introduction = createSurfacePanel()
+        introduction.addView(createWorkflowText("GUIDED LESSON", 12f, readyTextColor, true))
+        introduction.addView(createWorkflowText(model.title, 26f, Color.WHITE, true, 6))
+        introduction.addView(
+            createWorkflowText(modelOverview(model), 16f, bodyTextColor, false, 10)
+        )
+        introduction.addView(
+            createWorkflowText(
+                "Learning goal: identify ${model.parts.size} structures and explain what each one does.",
+                14f,
+                selectedTextColor,
+                true,
+                14
+            )
+        )
+        introduction.addView(
+            createWorkflowText("DID YOU KNOW?", 11f, readyTextColor, true, 18)
+        )
+        introduction.addView(createWorkflowText(modelFact(model), 14f, bodyTextColor, false, 5))
+
+        val lessonActions = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 16.dp, 0, 0)
+        }
+        lessonActions.addView(
+            createWorkflowAction(
+                if (lessonComplete) "Completed" else "Mark complete",
+                primary = !lessonComplete
+            ) {
+                preferences().edit().putBoolean(lessonKey(selectedModelIndex), true).apply()
+                if (!lessonComplete) addXp(25)
+                renderActiveWorkflow()
+                Toast.makeText(requireContext(), "Lesson progress saved", Toast.LENGTH_SHORT).show()
+            }
+        )
+        lessonActions.addView(
+            createWorkflowAction("Open 3D", primary = false) {
+                setLearningMode(ExplorerMode.EXPLORE)
+                selectPart(selectedPartIndex, updateViewer = true)
+            }
+        )
+        introduction.addView(lessonActions)
+        binding.workflowPanel.addView(introduction)
+
+        binding.workflowPanel.addView(
+            createWorkflowText(
+                "Anatomy guide",
+                20f,
+                Color.WHITE,
+                true,
+                22
+            )
+        )
+        model.parts.forEachIndexed { index, part ->
+            val partPanel = createSurfacePanel(topMargin = 8)
+            partPanel.isClickable = true
+            partPanel.isFocusable = true
+            partPanel.contentDescription =
+                "${part.title}. ${part.description}. Open in 3D."
+            partPanel.addView(
+                createWorkflowText(
+                    "${index + 1}. ${part.title}",
+                    17f,
+                    Color.WHITE,
+                    true
+                )
+            )
+            partPanel.addView(createWorkflowText(part.description, 14f, bodyTextColor, false, 7))
+            partPanel.addView(createWorkflowText("VIEW IN 3D", 11f, readyTextColor, true, 11))
+            partPanel.setOnClickListener {
+                selectPart(index, updateViewer = false)
+                setLearningMode(ExplorerMode.EXPLORE)
+                selectPart(index, updateViewer = true)
+            }
+            binding.workflowPanel.addView(partPanel)
+        }
+    }
+
+    private fun renderQuizMode() {
+        ensureQuizSession()
+        val model = MODEL_CATALOG[selectedModelIndex]
+        if (quizQuestionIndex >= quizQuestions.size) {
+            renderQuizResults(model)
+            return
+        }
+
+        val question = quizQuestions[quizQuestionIndex]
+        val header = createSurfacePanel()
+        header.addView(
+            createWorkflowText(
+                "QUESTION ${quizQuestionIndex + 1} OF ${quizQuestions.size}",
+                12f,
+                readyTextColor,
+                true
+            )
+        )
+        val progress = ProgressBar(
+            requireContext(),
+            null,
+            android.R.attr.progressBarStyleHorizontal
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                8.dp
+            ).apply { topMargin = 10.dp }
+            max = quizQuestions.size
+            setProgress(quizQuestionIndex + 1, true)
+            progressTintList = android.content.res.ColorStateList.valueOf(selectedTextColor)
+            progressBackgroundTintList =
+                android.content.res.ColorStateList.valueOf(Color.parseColor("#243853"))
+        }
+        header.addView(progress)
+        header.addView(
+            createWorkflowText(
+                "Score $quizScore  |  Best ${quizBestScore(selectedModelIndex)}/${quizQuestions.size}",
+                13f,
+                inactiveTextColor,
+                false,
+                10
+            )
+        )
+        header.addView(createWorkflowText(question.prompt, 21f, Color.WHITE, true, 18))
+        binding.workflowPanel.addView(header)
+
+        question.choices.forEachIndexed { answerIndex, answer ->
+            val selected = quizSelectedAnswer == answerIndex
+            val correct = answerIndex == question.correctIndex
+            val answered = quizSelectedAnswer != null
+            val answerView = createSurfacePanel(topMargin = 8).apply {
+                minimumHeight = 58.dp
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = !answered
+                isFocusable = !answered
+                contentDescription = "Answer ${answerIndex + 1}: $answer"
+                background = requireContext().getDrawable(
+                    when {
+                        answered && correct -> R.drawable.bg_filter_chip_selected
+                        selected -> R.drawable.bg_part_row_selected
+                        else -> R.drawable.bg_surface_panel
+                    }
+                )
+            }
+            answerView.addView(
+                createWorkflowText(
+                    "${answerIndex + 1}   $answer",
+                    16f,
+                    if (answered && correct) Color.WHITE else bodyTextColor,
+                    selected || (answered && correct)
+                )
+            )
+            answerView.setOnClickListener {
+                answerQuizQuestion(answerIndex)
+            }
+            binding.workflowPanel.addView(answerView)
+        }
+
+        quizSelectedAnswer?.let { selectedAnswer ->
+            val correct = selectedAnswer == question.correctIndex
+            val feedback = createSurfacePanel(topMargin = 12)
+            feedback.addView(
+                createWorkflowText(
+                    if (correct) "Correct" else "Not quite",
+                    18f,
+                    if (correct) readyTextColor else Color.parseColor("#FFB2B9"),
+                    true
+                )
+            )
+            feedback.addView(
+                createWorkflowText(
+                    question.explanation,
+                    14f,
+                    bodyTextColor,
+                    false,
+                    7
+                )
+            )
+            val feedbackActions = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, 14.dp, 0, 0)
+            }
+            feedbackActions.addView(
+                createWorkflowAction("View part", primary = false) {
+                    selectPart(question.partIndex, updateViewer = false)
+                    setLearningMode(ExplorerMode.EXPLORE)
+                    selectPart(question.partIndex, updateViewer = true)
+                }
+            )
+            feedbackActions.addView(
+                createWorkflowAction(
+                    if (quizQuestionIndex == quizQuestions.lastIndex) "Results" else "Next",
+                    primary = true
+                ) {
+                    quizQuestionIndex += 1
+                    quizSelectedAnswer = null
+                    renderActiveWorkflow()
+                    binding.contentScroll.post { binding.contentScroll.smoothScrollTo(0, 0) }
+                }
+            )
+            feedback.addView(feedbackActions)
+            binding.workflowPanel.addView(feedback)
+        }
+    }
+
+    private fun renderQuizResults(model: BiologyModel) {
+        val total = quizQuestions.size.coerceAtLeast(1)
+        val percentage = (quizScore * 100f / total).roundToInt()
+        val previousBest = quizBestScore(selectedModelIndex)
+        if (quizScore > previousBest) {
+            preferences().edit().putInt(quizBestKey(selectedModelIndex), quizScore).apply()
+        }
+        val result = createSurfacePanel()
+        result.gravity = Gravity.CENTER_HORIZONTAL
+        result.addView(createWorkflowText("QUIZ COMPLETE", 12f, readyTextColor, true))
+        result.addView(createWorkflowText("$percentage%", 42f, Color.WHITE, true, 12))
+        result.addView(
+            createWorkflowText(
+                "$quizScore of $total correct for ${model.title}",
+                16f,
+                bodyTextColor,
+                false,
+                5
+            )
+        )
+        result.addView(
+            createWorkflowText(
+                when {
+                    percentage >= 80 -> "Excellent work. You can identify the key structures."
+                    percentage >= 60 -> "Good progress. Review the highlighted parts and try again."
+                    else -> "Review the anatomy guide, then take another pass."
+                },
+                14f,
+                inactiveTextColor,
+                false,
+                12
+            )
+        )
+        val actions = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 16.dp, 0, 0)
+        }
+        actions.addView(
+            createWorkflowAction("Review", primary = false) {
+                setLearningMode(ExplorerMode.LEARN)
+            }
+        )
+        actions.addView(
+            createWorkflowAction("Try again", primary = true) {
+                startQuizSession()
+                renderActiveWorkflow()
+            }
+        )
+        result.addView(actions)
+        binding.workflowPanel.addView(result)
+        binding.root.announceForAccessibility("Quiz complete. Score $quizScore out of $total")
+    }
+
+    private fun answerQuizQuestion(answerIndex: Int) {
+        if (quizSelectedAnswer != null) return
+        val question = quizQuestions[quizQuestionIndex]
+        quizSelectedAnswer = answerIndex
+        val correct = answerIndex == question.correctIndex
+        if (correct) {
+            quizScore += 1
+            if (quizAwardedQuestions.add(quizQuestionIndex)) addXp(10)
+        }
+        binding.root.performHapticFeedback(
+            if (correct) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.REJECT
+        )
+        renderActiveWorkflow()
+        binding.root.announceForAccessibility(if (correct) "Correct" else "Incorrect")
+    }
+
+    private fun ensureQuizSession() {
+        if (quizModelIndex != selectedModelIndex || quizQuestions.isEmpty()) {
+            startQuizSession()
+        }
+    }
+
+    private fun startQuizSession() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        quizModelIndex = selectedModelIndex
+        quizQuestionIndex = 0
+        quizScore = 0
+        quizSelectedAnswer = null
+        quizAwardedQuestions.clear()
+        quizQuestions = model.parts.mapIndexed { partIndex, part ->
+            val choices = model.parts
+                .map(AnatomyPart::title)
+                .shuffled(Random(model.fileName.hashCode() + partIndex))
+                .let { shuffled ->
+                    val distractors = shuffled.filterNot { it == part.title }.take(3)
+                    (distractors + part.title).shuffled(
+                        Random(model.fileName.hashCode() * 31 + partIndex)
+                    )
+                }
+            QuizQuestion(
+                prompt = "Which structure matches this function?\n\n${part.description}",
+                choices = choices,
+                correctIndex = choices.indexOf(part.title),
+                explanation = "${part.title}: ${part.description}",
+                partIndex = partIndex
+            )
+        }.take(MAX_QUIZ_QUESTIONS)
+    }
+
+    private fun renderNotesMode() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val notesKey = notesKey(selectedModelIndex)
+        val panel = createSurfacePanel()
+        panel.addView(createWorkflowText("STUDY NOTES", 12f, readyTextColor, true))
+        panel.addView(createWorkflowText(model.title, 24f, Color.WHITE, true, 6))
+        panel.addView(
+            createWorkflowText(
+                "Notes are saved automatically on this device.",
+                13f,
+                inactiveTextColor,
+                false,
+                5
+            )
+        )
+        val savedStatus = createWorkflowText("Saved", 11f, readyTextColor, true, 7)
+        val editor = EditText(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                180.dp
+            ).apply { topMargin = 12.dp }
+            background = requireContext().getDrawable(R.drawable.bg_search_field)
+            gravity = Gravity.TOP or Gravity.START
+            hint = "Write observations, definitions, or revision prompts..."
+            setHintTextColor(Color.parseColor("#71849F"))
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            setPadding(14.dp, 13.dp, 14.dp, 13.dp)
+            setText(preferences().getString(notesKey, "").orEmpty())
+            contentDescription = "Study notes for ${model.title}"
+            doAfterTextChanged { value ->
+                preferences().edit().putString(notesKey, value?.toString().orEmpty()).apply()
+                savedStatus.text = "Saved just now"
+            }
+        }
+        panel.addView(editor)
+        panel.addView(savedStatus)
+
+        val noteActions = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 10.dp, 0, 0)
+        }
+        noteActions.addView(
+            createWorkflowAction("Share", primary = true) {
+                shareNotes(model.title, editor.text.toString())
+            }
+        )
+        noteActions.addView(
+            createWorkflowAction("Clear", primary = false) {
+                confirmClearNotes(notesKey)
+            }
+        )
+        panel.addView(noteActions)
+        binding.workflowPanel.addView(panel)
+
+        val currentPart = model.parts[selectedPartIndex]
+        val currentKey = bookmarkKey(selectedModelIndex, selectedPartIndex)
+        val bookmarked = currentKey in bookmarkedParts
+        val bookmarkPanel = createSurfacePanel(topMargin = 12)
+        bookmarkPanel.addView(createWorkflowText("BOOKMARK CURRENT PART", 12f, selectedTextColor, true))
+        bookmarkPanel.addView(createWorkflowText(currentPart.title, 19f, Color.WHITE, true, 6))
+        bookmarkPanel.addView(
+            createWorkflowText(currentPart.description, 14f, bodyTextColor, false, 6)
+        )
+        bookmarkPanel.addView(
+            createWorkflowAction(
+                if (bookmarked) "Remove bookmark" else "Add bookmark",
+                primary = !bookmarked,
+                topMargin = 14
+            ) {
+                toggleBookmark(selectedModelIndex, selectedPartIndex)
+                renderActiveWorkflow()
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    48.dp
+                ).apply { topMargin = 14.dp }
+            }
+        )
+        binding.workflowPanel.addView(bookmarkPanel)
+
+        binding.workflowPanel.addView(
+            createWorkflowText("Saved parts", 20f, Color.WHITE, true, 22)
+        )
+        val savedParts = model.parts.indices.filter {
+            bookmarkKey(selectedModelIndex, it) in bookmarkedParts
+        }
+        if (savedParts.isEmpty()) {
+            binding.workflowPanel.addView(
+                createWorkflowText(
+                    "No bookmarked parts yet. Save structures you want to revisit.",
+                    14f,
+                    inactiveTextColor,
+                    false,
+                    8
+                )
+            )
+        } else {
+            savedParts.forEach { partIndex ->
+                val part = model.parts[partIndex]
+                val row = createSurfacePanel(topMargin = 8).apply {
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = "Open bookmarked part ${part.title} in 3D"
+                }
+                row.addView(
+                    createWorkflowText(
+                        "${partIndex + 1}. ${part.title}",
+                        16f,
+                        Color.WHITE,
+                        true
+                    )
+                )
+                row.addView(createWorkflowText("OPEN IN 3D", 11f, readyTextColor, true, 6))
+                row.setOnClickListener {
+                    selectPart(partIndex, updateViewer = false)
+                    setLearningMode(ExplorerMode.EXPLORE)
+                    selectPart(partIndex, updateViewer = true)
+                }
+                binding.workflowPanel.addView(row)
+            }
+        }
+    }
+
+    private fun createSurfacePanel(topMargin: Int = 0): LinearLayout =
+        LinearLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { this.topMargin = topMargin.dp }
+            orientation = LinearLayout.VERTICAL
+            background = requireContext().getDrawable(R.drawable.bg_surface_panel)
+            setPadding(18.dp, 17.dp, 18.dp, 17.dp)
+        }
+
+    private fun createWorkflowText(
+        value: String,
+        size: Float,
+        color: Int,
+        bold: Boolean,
+        topMargin: Int = 0
+    ): TextView =
+        TextView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { this.topMargin = topMargin.dp }
+            text = value
+            textSize = size
+            setTextColor(color)
+            typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            setLineSpacing(2.dp.toFloat(), 1f)
+        }
+
+    private fun createWorkflowAction(
+        title: String,
+        primary: Boolean,
+        topMargin: Int = 0,
+        action: () -> Unit
+    ): TextView =
+        TextView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                48.dp,
+                1f
+            ).apply {
+                marginEnd = 8.dp
+                this.topMargin = topMargin.dp
+            }
+            minWidth = 96.dp
+            gravity = Gravity.CENTER
+            text = title
+            setTextColor(if (primary) Color.WHITE else bodyTextColor)
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            background = requireContext().getDrawable(
+                if (primary) R.drawable.bg_filter_chip_selected else R.drawable.bg_filter_chip
+            )
+            isClickable = true
+            isFocusable = true
+            contentDescription = title
+            setOnClickListener { action() }
+        }
+
+    private fun restoreBookmarks() {
+        bookmarkedParts.clear()
+        bookmarkedParts += preferences()
+            .getStringSet(PREFERENCE_BOOKMARKS, emptySet())
+            .orEmpty()
+    }
+
+    private fun toggleBookmark(modelIndex: Int, partIndex: Int) {
+        val key = bookmarkKey(modelIndex, partIndex)
+        val added = if (key in bookmarkedParts) {
+            bookmarkedParts.remove(key)
+            false
+        } else {
+            bookmarkedParts.add(key)
+            true
+        }
+        preferences().edit()
+            .putStringSet(PREFERENCE_BOOKMARKS, bookmarkedParts.toSet())
+            .apply()
+        binding.root.announceForAccessibility(
+            if (added) "Bookmark added" else "Bookmark removed"
+        )
+    }
+
+    private fun shareNotes(modelTitle: String, notes: String) {
+        if (notes.isBlank()) {
+            Toast.makeText(requireContext(), "Write a note before sharing", Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "$modelTitle study notes")
+                    putExtra(Intent.EXTRA_TEXT, "$modelTitle\n\n$notes")
+                },
+                "Share study notes"
+            )
+        )
+    }
+
+    private fun confirmClearNotes(key: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Clear study notes?")
+            .setMessage("This removes the notes saved for the selected model.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear") { _, _ ->
+                preferences().edit().remove(key).apply()
+                renderActiveWorkflow()
+            }
+            .show()
+    }
+
+    private fun preferences() =
+        requireContext().getSharedPreferences(PREFERENCES_NAME, 0)
+
+    private fun totalXp(): Int = preferences().getInt(PREFERENCE_TOTAL_XP, 0)
+
+    private fun addXp(amount: Int) {
+        preferences().edit().putInt(PREFERENCE_TOTAL_XP, totalXp() + amount).apply()
+    }
+
+    private fun quizBestScore(modelIndex: Int): Int =
+        preferences().getInt(quizBestKey(modelIndex), 0)
+
+    private fun bookmarkKey(modelIndex: Int, partIndex: Int) = "$modelIndex:$partIndex"
+
+    private fun lessonKey(modelIndex: Int) = "lesson_complete_$modelIndex"
+
+    private fun quizBestKey(modelIndex: Int) = "quiz_best_$modelIndex"
+
+    private fun notesKey(modelIndex: Int) = "notes_$modelIndex"
+
+    private fun modelOverview(model: BiologyModel): String =
+        MODEL_OVERVIEWS[model.fileName]
+            ?: "${model.title} is explored here as a three-dimensional biological structure."
+
+    private fun modelFact(model: BiologyModel): String =
+        MODEL_FACTS[model.fileName]
+            ?: "Its shape and organization are closely linked to its biological function."
+
+    private fun updateExploreAvailability() {
+        val available = isModelAvailable(MODEL_CATALOG[selectedModelIndex].fileName)
+        binding.modelAvailability.text = if (available) "READY" else "NEEDS FILE"
+        binding.modelAvailability.setTextColor(
+            if (available) readyTextColor else inactiveTextColor
+        )
     }
 
     private fun configureModelDiscovery() {
@@ -662,13 +1335,14 @@ class FirstFragment : Fragment() {
         selectPart(0, updateViewer = false)
         binding.fullScreenTitle.text = model.title
         loadModel(model)
+        if (currentMode != ExplorerMode.EXPLORE) renderActiveWorkflow()
     }
 
     private fun addRecentModel(index: Int) {
         recentModelIndices.remove(index)
         recentModelIndices.add(0, index)
         while (recentModelIndices.size > MAX_RECENT_MODELS) {
-            recentModelIndices.removeLast()
+            recentModelIndices.removeAt(recentModelIndices.lastIndex)
         }
         requireContext()
             .getSharedPreferences(PREFERENCES_NAME, 0)
@@ -863,11 +1537,30 @@ class FirstFragment : Fragment() {
             }
         )
         actions.addView(
-            createSheetAction("Done", true) {
-                dialog.dismiss()
+            createSheetAction(
+                if (bookmarkKey(selectedModelIndex, selectedPartIndex) in bookmarkedParts) {
+                    "Saved"
+                } else {
+                    "Bookmark"
+                },
+                true
+            ) {
+                toggleBookmark(selectedModelIndex, selectedPartIndex)
+                showPartBottomSheet()
             }
         )
         content.addView(actions)
+
+        content.addView(
+            createSheetAction("Done", true) {
+                dialog.dismiss()
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    46.dp
+                ).apply { topMargin = 8.dp }
+            }
+        )
 
         dialog.setContentView(content)
         dialog.behavior.apply {
@@ -979,9 +1672,6 @@ class FirstFragment : Fragment() {
         binding.zoomOutButton.alpha = if (canZoomOut) 1f else 0.35f
     }
 
-    private fun toggledVisibility(currentVisibility: Int): Int =
-        if (currentVisibility == View.VISIBLE) View.GONE else View.VISIBLE
-
     private fun findStoredModel(fileName: String): File? {
         val modelFile = File(modelStorageDirectory, fileName)
         return modelFile.takeIf { it.exists() && it.length() > 0 }
@@ -1064,7 +1754,10 @@ class FirstFragment : Fragment() {
         const val PREFERENCES_NAME = "biology_explorer"
         const val PREFERENCE_RECENT_MODELS = "recent_models"
         const val PREFERENCE_FULL_SCREEN_HINT_SHOWN = "full_screen_hint_shown"
+        const val PREFERENCE_BOOKMARKS = "bookmarked_parts"
+        const val PREFERENCE_TOTAL_XP = "total_xp"
         const val MAX_RECENT_MODELS = 5
+        const val MAX_QUIZ_QUESTIONS = 5
         const val FULL_SCREEN_CONTROLS_TIMEOUT_MS = 3_000L
         const val FULL_SCREEN_HINT_TIMEOUT_MS = 4_500L
         const val THUMBNAIL_IMAGE_TAG = "thumbnail_image"
@@ -1080,6 +1773,7 @@ class FirstFragment : Fragment() {
         val selectedTextColor: Int = Color.parseColor("#AFA3FF")
         val inactiveTextColor: Int = Color.parseColor("#98A8C2")
         val readyTextColor: Int = Color.parseColor("#73E8C5")
+        val bodyTextColor: Int = Color.parseColor("#C7D4E7")
         val FILTERS =
             listOf(FILTER_ALL, FILTER_ORGANELLES, FILTER_PLANTS, FILTER_HUMAN, FILTER_MICROBIOLOGY)
         val ROTATION_SPEEDS = listOf(10, 18, 30)
@@ -1089,6 +1783,66 @@ class FirstFragment : Fragment() {
             CameraPreset("right", "RT", "Right"),
             CameraPreset("back", "BK", "Back"),
             CameraPreset("top", "TOP", "Top")
+        )
+        val MODEL_OVERVIEWS = mapOf(
+            "Bacteriacell.glb" to
+                "A bacterial cell is a compact prokaryotic system that carries out every life process without a membrane-bound nucleus.",
+            "Cell Membrane.glb" to
+                "The cell membrane is a dynamic, selectively permeable boundary that coordinates transport, signaling, and recognition.",
+            "Chloroplast.glb" to
+                "Chloroplasts convert light energy into chemical energy and provide the internal membranes needed for photosynthesis.",
+            "epithelial microvilli.glb" to
+                "Microvilli are microscopic surface projections that let epithelial cells absorb materials efficiently.",
+            "Lysosome.glb" to
+                "Lysosomes are membrane-bound recycling centers that digest worn components and biological macromolecules.",
+            "Mitochondrion.glb" to
+                "Mitochondria couple nutrient oxidation to ATP production using highly folded internal membranes.",
+            "Neuron.glb" to
+                "A neuron is a specialized signaling cell built to receive, integrate, and transmit information over distance.",
+            "plant cell wall.glb" to
+                "The plant cell wall is a layered extracellular structure that provides strength while permitting controlled growth.",
+            "PlantCell.glb" to
+                "A plant cell combines a cellulose wall, chloroplasts, and a large vacuole with the shared machinery of eukaryotic cells.",
+            "Ribosomes.glb" to
+                "Ribosomes are molecular machines that translate messenger RNA into ordered chains of amino acids.",
+            "Rough Endoplasmic Reticulum.glb" to
+                "The rough endoplasmic reticulum synthesizes and begins processing proteins destined for membranes or secretion.",
+            "Smooth Endoplasmic Reticulum.glb" to
+                "The smooth endoplasmic reticulum supports lipid synthesis, detoxification, and controlled calcium storage.",
+            "Vacuole.glb" to
+                "A vacuole is a membrane-bound storage compartment that is especially important for plant-cell water balance.",
+            "WhiteBloodCell.glb" to
+                "White blood cells are mobile immune cells that detect threats, coordinate defenses, and remove damaged material."
+        )
+        val MODEL_FACTS = mapOf(
+            "Bacteriacell.glb" to
+                "Bacterial ribosomes can begin translating an RNA molecule while it is still being transcribed.",
+            "Cell Membrane.glb" to
+                "Membrane lipids and many proteins move laterally, which is why the structure is called a fluid mosaic.",
+            "Chloroplast.glb" to
+                "Chloroplasts contain their own DNA, reflecting their evolutionary origin from ancient bacteria.",
+            "epithelial microvilli.glb" to
+                "A dense brush border can multiply a cell's absorptive surface area many times.",
+            "Lysosome.glb" to
+                "The lysosomal interior is kept acidic so its digestive enzymes work efficiently.",
+            "Mitochondrion.glb" to
+                "The number and shape of mitochondria change with a cell's energy demand.",
+            "Neuron.glb" to
+                "Some human axons extend more than a meter while remaining part of a single cell.",
+            "plant cell wall.glb" to
+                "Cellulose fibers have high tensile strength, while the surrounding matrix controls flexibility.",
+            "PlantCell.glb" to
+                "Water entering the central vacuole creates turgor pressure that helps support non-woody tissues.",
+            "Ribosomes.glb" to
+                "A ribosome reads messenger RNA three bases at a time, matching each codon to an amino acid.",
+            "Rough Endoplasmic Reticulum.glb" to
+                "Ribosomes attach to the rough ER only while making proteins that carry an ER targeting signal.",
+            "Smooth Endoplasmic Reticulum.glb" to
+                "In muscle cells, specialized smooth ER releases calcium to trigger contraction.",
+            "Vacuole.glb" to
+                "A mature plant cell's central vacuole can occupy most of the cell's internal volume.",
+            "WhiteBloodCell.glb" to
+                "White blood cells can squeeze between vessel-wall cells to reach infected tissue."
         )
 
         fun part(
@@ -1249,6 +2003,21 @@ private data class CameraPreset(
     val shortLabel: String,
     val title: String
 )
+
+private data class QuizQuestion(
+    val prompt: String,
+    val choices: List<String>,
+    val correctIndex: Int,
+    val explanation: String,
+    val partIndex: Int
+)
+
+private enum class ExplorerMode(val title: String) {
+    EXPLORE("Explore"),
+    LEARN("Learn"),
+    QUIZ("Quiz"),
+    NOTES("Notes")
+}
 
 private val Int.dp: Int
     get() = (this * android.content.res.Resources.getSystem().displayMetrics.density).toInt()

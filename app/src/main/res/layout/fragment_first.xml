@@ -60,6 +60,69 @@
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <LinearLayout
+        android:id="@+id/learningModeTabs"
+        android:layout_width="0dp"
+        android:layout_height="54dp"
+        android:background="#F2051427"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topAppBar">
+
+        <TextView
+            android:id="@+id/exploreTab"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_filter_chip_selected"
+            android:contentDescription="Explore selected 3D model"
+            android:gravity="center"
+            android:text="Explore"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/learnTab"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:contentDescription="Learn about selected model"
+            android:gravity="center"
+            android:text="Learn"
+            android:textColor="#98A8C2"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/quizTab"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:contentDescription="Take anatomy quiz"
+            android:gravity="center"
+            android:text="Quiz"
+            android:textColor="#98A8C2"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/notesTab"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:contentDescription="Open notes and bookmarks"
+            android:gravity="center"
+            android:text="Notes"
+            android:textColor="#98A8C2"
+            android:textSize="13sp" />
+    </LinearLayout>
+
     <ScrollView
         android:id="@+id/contentScroll"
         android:layout_width="0dp"
@@ -69,9 +132,10 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topAppBar">
+        app:layout_constraintTop_toBottomOf="@id/learningModeTabs">
 
         <LinearLayout
+            android:id="@+id/contentColumn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -79,6 +143,13 @@
             android:paddingTop="10dp"
             android:paddingEnd="12dp"
             android:paddingBottom="28dp">
+
+            <LinearLayout
+                android:id="@+id/workflowPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
 
             <FrameLayout
                 android:id="@+id/viewerContainer"
