@@ -51,13 +51,15 @@
             border-radius: 50%;
             background: #7c4dff;
             box-shadow: 0 0 0 6px rgba(124, 77, 255, 0.24), 0 0 18px #8d68ff;
+            opacity: 0.48;
+            transition: opacity 140ms ease, background 140ms ease, box-shadow 140ms ease;
         }
 
         .hotspot::after {
             content: attr(data-label);
             position: absolute;
             left: 18px;
-            top: -13px;
+            top: calc(-13px + var(--label-shift, 0px));
             display: none;
             width: max-content;
             max-width: 170px;
@@ -72,12 +74,43 @@
             pointer-events: none;
         }
 
+        .hotspot::before {
+            content: "";
+            position: absolute;
+            left: 16px;
+            top: 10px;
+            display: none;
+            width: 26px;
+            border-top: 1px solid #936cff;
+            pointer-events: none;
+        }
+
+        .hotspot.label-left::after {
+            right: 18px;
+            left: auto;
+        }
+
+        .hotspot.label-left::before {
+            right: 16px;
+            left: auto;
+        }
+
         .hotspot.selected {
             background: #55e7d0;
             box-shadow: 0 0 0 6px rgba(85, 231, 208, 0.22), 0 0 20px #55e7d0;
+            opacity: 1;
         }
 
-        .hotspot.selected::after { display: block; }
+        .hotspot.selected::after,
+        .hotspot.selected::before,
+        body.show-all-labels .hotspot[data-visible]::after,
+        body.show-all-labels .hotspot[data-visible]::before { display: block; }
+
+        .hotspot:not([data-visible]) {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .hotspot[hidden] { display: none; }
     </style>
 </head>
@@ -106,11 +139,15 @@
     const missing = params.get("missing") === "1";
     const modelIndex = Number(params.get("modelIndex") || "-1");
     const rotationSpeed = Number(params.get("rotationSpeed") || "18");
+    let identifyMode = params.get("identifyMode") !== "0";
+    let showAllLabels = params.get("showAllLabels") === "1";
     const viewer = document.getElementById("viewer");
     const message = document.getElementById("message");
     let parts = [];
     let initialCameraRadius = 0;
     let lastCameraUpdate = 0;
+    let pointerStart = null;
+    let lastTapAt = 0;
 
     try {
         parts = JSON.parse(params.get("parts") || "[]");
@@ -120,20 +157,24 @@
 
     if (src) {
         viewer.src = src;
+        viewer.alt = `Interactive 3D model of ${title}`;
         viewer.setAttribute("rotation-per-second", `${rotationSpeed}deg`);
     } else if (missing) {
         viewer.style.display = "none";
         message.innerHTML = `<strong>${escapeHtml(title)}</strong><br>This model is listed but has not been downloaded to this device yet.`;
+        notifyModelState("error", `${title} is not available on this device.`);
     } else {
         message.textContent = "Select a model to begin.";
     }
 
     viewer.addEventListener("load", () => {
         addHotspots();
+        document.body.classList.toggle("show-all-labels", showAllLabels);
         initialCameraRadius = viewer.getCameraOrbit().radius;
         reportCameraState();
         captureThumbnail();
         message.style.display = "none";
+        notifyModelState("loaded", "");
     });
 
     viewer.addEventListener("camera-change", () => {
@@ -141,11 +182,13 @@
         if (now - lastCameraUpdate < 180) return;
         lastCameraUpdate = now;
         reportCameraState();
+        layoutHotspotLabels();
     });
 
     viewer.addEventListener("error", () => {
         viewer.style.display = "none";
         message.innerHTML = `<strong>${escapeHtml(title)}</strong><br>The 3D file could not be opened. Download it again and retry.`;
+        notifyModelState("error", `${title} could not be opened. Retry the model or choose another one.`);
     });
 
     function addHotspots() {
@@ -157,10 +200,11 @@
             hotspot.dataset.position = part.position;
             hotspot.dataset.normal = part.normal || "0 0 1";
             hotspot.dataset.label = part.title;
+            hotspot.dataset.visibilityAttribute = "visible";
             hotspot.setAttribute("aria-label", `Identify ${part.title}`);
             hotspot.addEventListener("click", event => {
                 event.stopPropagation();
-                selectPart(index);
+                focusPart(index);
                 if (window.BiologyBridge) {
                     window.BiologyBridge.onPartSelected(index);
                 }
@@ -168,13 +212,43 @@
             viewer.appendChild(hotspot);
         });
 
-        if (parts.length) selectPart(0);
+        if (parts.length && !identifyMode) selectPart(0);
     }
 
     window.selectPart = function(index) {
+        selectPart(index);
+    };
+
+    function selectPart(index) {
         viewer.querySelectorAll(".hotspot").forEach((hotspot, itemIndex) => {
             hotspot.classList.toggle("selected", itemIndex === Number(index));
         });
+        layoutHotspotLabels();
+    }
+
+    window.focusPart = focusPart;
+
+    function focusPart(index) {
+        selectPart(index);
+        const part = parts[Number(index)];
+        if (!part) return;
+        const orbit = viewer.getCameraOrbit();
+        viewer.cameraTarget = part.position;
+        viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${Math.max(0.05, orbit.radius * 0.78)}m`;
+        viewer.jumpCameraToGoal();
+    }
+
+    window.setShowAllLabels = function(enabled) {
+        showAllLabels = Boolean(enabled);
+        document.body.classList.toggle("show-all-labels", showAllLabels);
+        layoutHotspotLabels();
+    };
+
+    window.setIdentifyMode = function(enabled) {
+        identifyMode = Boolean(enabled);
+        if (identifyMode) {
+            viewer.querySelectorAll(".hotspot").forEach(hotspot => hotspot.classList.remove("selected"));
+        }
     };
 
     window.setAutoRotation = function(enabled) {
@@ -183,6 +257,19 @@
 
     window.setRotationSpeed = function(degreesPerSecond) {
         viewer.setAttribute("rotation-per-second", `${Number(degreesPerSecond)}deg`);
+    };
+
+    window.setCameraPreset = function(preset) {
+        const radius = viewer.getCameraOrbit().radius;
+        const cameraViews = {
+            front: `0deg 72deg ${radius}m`,
+            right: `90deg 72deg ${radius}m`,
+            back: `180deg 72deg ${radius}m`,
+            top: `0deg 12deg ${radius}m`
+        };
+        viewer.cameraTarget = "auto auto auto";
+        viewer.cameraOrbit = cameraViews[preset] || cameraViews.front;
+        viewer.jumpCameraToGoal();
     };
 
     window.rotateBy = function(degrees) {
@@ -217,6 +304,58 @@
         else if (degrees >= 135 && degrees < 225) orientation = "Back";
         else if (degrees >= 225 && degrees < 315) orientation = "Left";
         window.BiologyBridge.onCameraState(zoom, orientation);
+    }
+
+    function layoutHotspotLabels() {
+        const visibleHotspots = [...viewer.querySelectorAll(".hotspot[data-visible]")];
+        const positioned = visibleHotspots.map(hotspot => {
+            const data = viewer.queryHotspot(hotspot.slot);
+            if (!data) return null;
+            return { hotspot, x: data.canvasPosition.x, y: data.canvasPosition.y };
+        }).filter(Boolean).sort((a, b) => a.y - b.y);
+
+        let previousLabelY = -Infinity;
+        positioned.forEach(item => {
+            const desiredY = Math.max(item.y, previousLabelY + 38);
+            item.hotspot.style.setProperty("--label-shift", `${desiredY - item.y}px`);
+            item.hotspot.classList.toggle("label-left", item.x > viewer.clientWidth * 0.62);
+            previousLabelY = desiredY;
+        });
+    }
+
+    viewer.addEventListener("pointerdown", event => {
+        pointerStart = { x: event.clientX, y: event.clientY, at: Date.now() };
+    });
+
+    viewer.addEventListener("pointerup", event => {
+        if (!pointerStart) return;
+        const movement = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
+        pointerStart = null;
+        if (movement > 12) return;
+
+        const now = Date.now();
+        if (now - lastTapAt < 330) {
+            focusFromPoint(event.clientX, event.clientY);
+            lastTapAt = 0;
+        } else {
+            lastTapAt = now;
+            if (window.BiologyBridge) window.BiologyBridge.onViewerTapped();
+        }
+    });
+
+    function focusFromPoint(x, y) {
+        const hit = viewer.positionAndNormalFromPoint(x, y);
+        if (!hit) return;
+        const orbit = viewer.getCameraOrbit();
+        viewer.cameraTarget = `${hit.position.x}m ${hit.position.y}m ${hit.position.z}m`;
+        viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${Math.max(0.05, orbit.radius * 0.72)}m`;
+        viewer.jumpCameraToGoal();
+    }
+
+    function notifyModelState(state, detail) {
+        if (window.BiologyBridge) {
+            window.BiologyBridge.onModelState(state, detail || "");
+        }
     }
 
     async function captureThumbnail() {

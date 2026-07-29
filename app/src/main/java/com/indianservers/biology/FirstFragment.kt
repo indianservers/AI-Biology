@@ -6,6 +6,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.content.pm.ActivityInfo
 import android.util.Base64
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -29,8 +32,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.widget.doAfterTextChanged
+import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -45,7 +51,18 @@ class FirstFragment : Fragment() {
     private var selectedPartIndex = 0
     private var isAutoRotating = true
     private var rotationSpeedIndex = 1
+    private var cameraPresetIndex = 0
     private var isFullScreen = false
+    private var showAllLabels = false
+    private var identifyMode = true
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val hideFullScreenControls = Runnable { setFullScreenControlsVisible(false) }
+    private val hideFullScreenHint = Runnable {
+        _binding?.fullScreenHint?.animate()?.alpha(0f)?.withEndAction {
+            _binding?.fullScreenHint?.visibility = View.GONE
+        }?.start()
+    }
+    private var partBottomSheet: BottomSheetDialog? = null
     private var activeFilter = FILTER_ALL
     private var modelQuery = ""
     private val recentModelIndices = mutableListOf<Int>()
@@ -109,6 +126,9 @@ class FirstFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        uiHandler.removeCallbacksAndMessages(null)
+        partBottomSheet?.dismiss()
+        partBottomSheet = null
         if (isFullScreen) exitFullScreen()
         binding.modelWebView.removeJavascriptInterface(BRIDGE_NAME)
         binding.modelWebView.destroy()
@@ -145,8 +165,14 @@ class FirstFragment : Fragment() {
             }
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    _binding?.modelProgress?.visibility =
-                        if (newProgress >= 100) View.GONE else View.VISIBLE
+                    if (_binding != null && binding.viewerStatusOverlay.visibility == View.VISIBLE) {
+                        binding.viewerStatusText.text =
+                            if (newProgress < 100) {
+                                "Preparing viewer… $newProgress%"
+                            } else {
+                                "Loading 3D geometry…"
+                            }
+                    }
                 }
             }
 
@@ -175,26 +201,58 @@ class FirstFragment : Fragment() {
     }
 
     private fun configureViewerControls() {
-        binding.rotateLeftButton.setOnClickListener { runViewerCommand("rotateBy(-30)") }
-        binding.rotateRightButton.setOnClickListener { runViewerCommand("rotateBy(30)") }
-        binding.zoomOutButton.setOnClickListener { runViewerCommand("zoomBy(1.2)") }
-        binding.zoomInButton.setOnClickListener { runViewerCommand("zoomBy(0.82)") }
-        binding.resetViewButton.setOnClickListener { runViewerCommand("resetView()") }
+        binding.rotateLeftButton.setOnClickListener {
+            runViewerCommand("rotateBy(-30)")
+            onViewerControlUsed()
+        }
+        binding.rotateRightButton.setOnClickListener {
+            runViewerCommand("rotateBy(30)")
+            onViewerControlUsed()
+        }
+        binding.zoomOutButton.setOnClickListener {
+            runViewerCommand("zoomBy(1.2)")
+            onViewerControlUsed()
+        }
+        binding.zoomInButton.setOnClickListener {
+            runViewerCommand("zoomBy(0.82)")
+            onViewerControlUsed()
+        }
+        binding.resetViewButton.setOnClickListener {
+            cameraPresetIndex = 0
+            updateCameraPresetControl()
+            runViewerCommand("resetView()")
+            onViewerControlUsed()
+        }
         binding.rotationSpeedButton.setOnClickListener {
             rotationSpeedIndex = (rotationSpeedIndex + 1) % ROTATION_SPEEDS.size
             updateRotationSpeedControl()
             runViewerCommand("setRotationSpeed(${ROTATION_SPEEDS[rotationSpeedIndex]})")
+            onViewerControlUsed()
+        }
+        binding.cameraViewButton.setOnClickListener {
+            cameraPresetIndex = (cameraPresetIndex + 1) % CAMERA_PRESETS.size
+            updateCameraPresetControl()
+            runViewerCommand("setCameraPreset('${CAMERA_PRESETS[cameraPresetIndex].key}')")
+            onViewerControlUsed()
         }
         binding.rotationButton.setOnClickListener {
             isAutoRotating = !isAutoRotating
             updateRotationControl()
             runViewerCommand("setAutoRotation($isAutoRotating)")
+            onViewerControlUsed()
         }
         binding.fullScreenButton.setOnClickListener {
             if (isFullScreen) exitFullScreen() else enterFullScreen()
         }
         binding.fullScreenClose.setOnClickListener { exitFullScreen() }
+        binding.retryModelButton.setOnClickListener {
+            loadModel(MODEL_CATALOG[selectedModelIndex])
+        }
+        binding.closeStatusButton.setOnClickListener {
+            binding.viewerStatusOverlay.visibility = View.GONE
+        }
         updateRotationSpeedControl()
+        updateCameraPresetControl()
     }
 
     private fun updateRotationControl() {
@@ -209,6 +267,13 @@ class FirstFragment : Fragment() {
         binding.rotationSpeedButton.contentDescription =
             "Rotation speed ${ROTATION_SPEED_LABELS[rotationSpeedIndex]}"
         binding.rotationSpeedButton.tooltipText = binding.rotationSpeedButton.contentDescription
+    }
+
+    private fun updateCameraPresetControl() {
+        val preset = CAMERA_PRESETS[cameraPresetIndex]
+        binding.cameraViewButton.text = preset.shortLabel
+        binding.cameraViewButton.contentDescription = "${preset.title} camera view"
+        binding.cameraViewButton.tooltipText = binding.cameraViewButton.contentDescription
     }
 
     private fun runViewerCommand(command: String) {
@@ -233,6 +298,7 @@ class FirstFragment : Fragment() {
         )
 
         isFullScreen = true
+        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         binding.fullScreenTitle.text = MODEL_CATALOG[selectedModelIndex].title
         binding.fullScreenButton.text = "×"
         binding.fullScreenButton.contentDescription = "Close full screen"
@@ -242,6 +308,8 @@ class FirstFragment : Fragment() {
         binding.fullScreenTopBar.bringToFront()
         binding.fullScreenButton.visibility = View.GONE
         updateOrientationTopMargin(76.dp)
+        showFullScreenControls()
+        showFullScreenHintIfNeeded()
         (binding.fullScreenOverlay.getTag(R.id.fullScreenOverlay) as? OnBackPressedCallback)
             ?.isEnabled = true
         setSystemBarsVisible(false)
@@ -258,6 +326,10 @@ class FirstFragment : Fragment() {
         )
 
         isFullScreen = false
+        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        uiHandler.removeCallbacks(hideFullScreenControls)
+        uiHandler.removeCallbacks(hideFullScreenHint)
+        setFullScreenControlsVisible(true)
         binding.fullScreenButton.text = "⛶"
         binding.fullScreenButton.contentDescription = "Open full screen"
         binding.fullScreenButton.tooltipText = "Open full screen"
@@ -268,6 +340,51 @@ class FirstFragment : Fragment() {
         (binding.fullScreenOverlay.getTag(R.id.fullScreenOverlay) as? OnBackPressedCallback)
             ?.isEnabled = false
         setSystemBarsVisible(true)
+    }
+
+    private fun onViewerControlUsed() {
+        if (isFullScreen) showFullScreenControls()
+    }
+
+    private fun showFullScreenControls() {
+        if (!isFullScreen) return
+        uiHandler.removeCallbacks(hideFullScreenControls)
+        setFullScreenControlsVisible(true)
+        uiHandler.postDelayed(hideFullScreenControls, FULL_SCREEN_CONTROLS_TIMEOUT_MS)
+    }
+
+    private fun setFullScreenControlsVisible(visible: Boolean) {
+        if (_binding == null) return
+        val controls = listOf(
+            binding.fullScreenTopBar,
+            binding.viewerControlContainer,
+            binding.zoomControls,
+            binding.orientationIndicator
+        )
+        controls.forEach { control ->
+            control.animate().cancel()
+            if (visible) {
+                control.visibility = View.VISIBLE
+                control.animate().alpha(1f).setDuration(140L).start()
+            } else {
+                control.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction { if (isFullScreen) control.visibility = View.GONE }
+                    .start()
+            }
+        }
+    }
+
+    private fun showFullScreenHintIfNeeded() {
+        val preferences = requireContext().getSharedPreferences(PREFERENCES_NAME, 0)
+        if (preferences.getBoolean(PREFERENCE_FULL_SCREEN_HINT_SHOWN, false)) return
+        preferences.edit().putBoolean(PREFERENCE_FULL_SCREEN_HINT_SHOWN, true).apply()
+        binding.fullScreenHint.alpha = 1f
+        binding.fullScreenHint.visibility = View.VISIBLE
+        binding.fullScreenHint.bringToFront()
+        uiHandler.removeCallbacks(hideFullScreenHint)
+        uiHandler.postDelayed(hideFullScreenHint, FULL_SCREEN_HINT_TIMEOUT_MS)
     }
 
     private fun updateOrientationTopMargin(topMargin: Int) {
@@ -528,7 +645,10 @@ class FirstFragment : Fragment() {
                     R.drawable.bg_part_row
                 }
             )
-            setOnClickListener { selectPart(index, updateViewer = true) }
+            setOnClickListener {
+                selectPart(index, updateViewer = true)
+                showPartBottomSheet()
+            }
         }
     }
 
@@ -658,9 +778,131 @@ class FirstFragment : Fragment() {
         binding.featureDescription.text = part.description
 
         if (updateViewer) {
-            binding.modelWebView.evaluateJavascript("window.selectPart($index)", null)
+            binding.modelWebView.evaluateJavascript("window.focusPart($index)", null)
         }
     }
+
+    private fun showPartBottomSheet() {
+        if (_binding == null) return
+        partBottomSheet?.dismiss()
+
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val part = model.parts[selectedPartIndex]
+        val dialog = BottomSheetDialog(requireContext())
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 16.dp, 20.dp, 24.dp)
+            background = requireContext().getDrawable(R.drawable.bg_surface_panel)
+        }
+
+        content.addView(
+            TextView(requireContext()).apply {
+                text = "${selectedPartIndex + 1} of ${model.parts.size}  •  ${model.title}"
+                setTextColor(readyTextColor)
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+        )
+        content.addView(
+            TextView(requireContext()).apply {
+                text = part.title
+                setTextColor(Color.WHITE)
+                textSize = 24f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 7.dp, 0, 8.dp)
+            }
+        )
+        content.addView(
+            TextView(requireContext()).apply {
+                text = part.description
+                setTextColor(Color.parseColor("#C7D4E7"))
+                textSize = 16f
+                setLineSpacing(3.dp.toFloat(), 1f)
+            }
+        )
+
+        val showAllSwitch = SwitchCompat(requireContext()).apply {
+            text = "Show all visible labels"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            isChecked = showAllLabels
+            setPadding(0, 14.dp, 0, 4.dp)
+            setOnCheckedChangeListener { _, enabled ->
+                showAllLabels = enabled
+                runViewerCommand("setShowAllLabels($enabled)")
+            }
+        }
+        val identifySwitch = SwitchCompat(requireContext()).apply {
+            text = "Identify mode"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            isChecked = identifyMode
+            setPadding(0, 4.dp, 0, 10.dp)
+            setOnCheckedChangeListener { _, enabled ->
+                identifyMode = enabled
+                runViewerCommand("setIdentifyMode($enabled)")
+            }
+        }
+        content.addView(showAllSwitch)
+        content.addView(identifySwitch)
+
+        val actions = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        actions.addView(
+            createSheetAction("Previous", selectedPartIndex > 0) {
+                selectPart(selectedPartIndex - 1, updateViewer = true)
+                showPartBottomSheet()
+            }
+        )
+        actions.addView(
+            createSheetAction("Next", selectedPartIndex < model.parts.lastIndex) {
+                selectPart(selectedPartIndex + 1, updateViewer = true)
+                showPartBottomSheet()
+            }
+        )
+        actions.addView(
+            createSheetAction("Done", true) {
+                dialog.dismiss()
+            }
+        )
+        content.addView(actions)
+
+        dialog.setContentView(content)
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = false
+            peekHeight = 250.dp
+        }
+        dialog.setOnDismissListener {
+            if (partBottomSheet === dialog) partBottomSheet = null
+        }
+        partBottomSheet = dialog
+        dialog.show()
+    }
+
+    private fun createSheetAction(
+        title: String,
+        enabled: Boolean,
+        action: () -> Unit
+    ): TextView =
+        TextView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 46.dp, 1f).apply {
+                marginEnd = 7.dp
+            }
+            gravity = Gravity.CENTER
+            text = title
+            setTextColor(if (enabled) Color.WHITE else inactiveTextColor)
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            alpha = if (enabled) 1f else 0.45f
+            isEnabled = enabled
+            background = requireContext().getDrawable(
+                if (title == "Done") R.drawable.bg_filter_chip_selected else R.drawable.bg_filter_chip
+            )
+            setOnClickListener { action() }
+        }
 
     private fun loadModel(model: BiologyModel) {
         binding.modelTitle.text = model.title
@@ -691,7 +933,12 @@ class FirstFragment : Fragment() {
             else -> null
         }
 
+        binding.viewerStatusOverlay.visibility = View.VISIBLE
+        binding.viewerStatusOverlay.bringToFront()
         binding.modelProgress.visibility = if (available) View.VISIBLE else View.GONE
+        binding.viewerStatusActions.visibility = if (available) View.GONE else View.VISIBLE
+        binding.viewerStatusText.text =
+            if (available) "Preparing ${model.title}…" else "${model.title} is not available."
         isAutoRotating = true
         updateRotationControl()
         binding.zoomLevel.text = "100%"
@@ -708,8 +955,18 @@ class FirstFragment : Fragment() {
             append("&parts=${Uri.encode(partsJson)}")
             append("&modelIndex=$selectedModelIndex")
             append("&rotationSpeed=${ROTATION_SPEEDS[rotationSpeedIndex]}")
+            append("&identifyMode=${if (identifyMode) 1 else 0}")
+            append("&showAllLabels=${if (showAllLabels) 1 else 0}")
         }
         binding.modelWebView.loadUrl(query)
+    }
+
+    private fun showViewerError(message: String) {
+        binding.viewerStatusOverlay.visibility = View.VISIBLE
+        binding.viewerStatusOverlay.bringToFront()
+        binding.modelProgress.visibility = View.GONE
+        binding.viewerStatusActions.visibility = View.VISIBLE
+        binding.viewerStatusText.text = message
     }
 
     private fun updateZoomControls(zoomPercent: Int) {
@@ -742,7 +999,30 @@ class FirstFragment : Fragment() {
         @JavascriptInterface
         fun onPartSelected(index: Int) {
             activity?.runOnUiThread {
-                if (_binding != null) selectPart(index, updateViewer = false)
+                if (_binding != null) {
+                    selectPart(index, updateViewer = false)
+                    showPartBottomSheet()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun onViewerTapped() {
+            activity?.runOnUiThread {
+                if (_binding != null && isFullScreen) showFullScreenControls()
+            }
+        }
+
+        @JavascriptInterface
+        fun onModelState(state: String, detail: String) {
+            activity?.runOnUiThread {
+                if (_binding == null) return@runOnUiThread
+                when (state) {
+                    "loaded" -> binding.viewerStatusOverlay.visibility = View.GONE
+                    "error" -> showViewerError(
+                        detail.ifBlank { "The 3D model could not be opened." }
+                    )
+                }
             }
         }
 
@@ -783,7 +1063,10 @@ class FirstFragment : Fragment() {
         const val BRIDGE_NAME = "BiologyBridge"
         const val PREFERENCES_NAME = "biology_explorer"
         const val PREFERENCE_RECENT_MODELS = "recent_models"
+        const val PREFERENCE_FULL_SCREEN_HINT_SHOWN = "full_screen_hint_shown"
         const val MAX_RECENT_MODELS = 5
+        const val FULL_SCREEN_CONTROLS_TIMEOUT_MS = 3_000L
+        const val FULL_SCREEN_HINT_TIMEOUT_MS = 4_500L
         const val THUMBNAIL_IMAGE_TAG = "thumbnail_image"
         const val THUMBNAIL_PLACEHOLDER_TAG = "thumbnail_placeholder"
         const val FILTER_ALL = "All"
@@ -801,6 +1084,12 @@ class FirstFragment : Fragment() {
             listOf(FILTER_ALL, FILTER_ORGANELLES, FILTER_PLANTS, FILTER_HUMAN, FILTER_MICROBIOLOGY)
         val ROTATION_SPEEDS = listOf(10, 18, 30)
         val ROTATION_SPEED_LABELS = listOf("0.5×", "1×", "1.5×")
+        val CAMERA_PRESETS = listOf(
+            CameraPreset("front", "FR", "Front"),
+            CameraPreset("right", "RT", "Right"),
+            CameraPreset("back", "BK", "Back"),
+            CameraPreset("top", "TOP", "Top")
+        )
 
         fun part(
             title: String,
@@ -953,6 +1242,12 @@ private data class AnatomyPart(
     val description: String,
     val position: String,
     val normal: String
+)
+
+private data class CameraPreset(
+    val key: String,
+    val shortLabel: String,
+    val title: String
 )
 
 private val Int.dp: Int

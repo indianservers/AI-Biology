@@ -93,14 +93,65 @@
                     android:background="#00000000"
                     android:overScrollMode="never" />
 
-                <ProgressBar
-                    android:id="@+id/modelProgress"
-                    style="?android:attr/progressBarStyleLarge"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="center"
-                    android:indeterminateTint="#55E7D0"
-                    android:visibility="gone" />
+                <LinearLayout
+                    android:id="@+id/viewerStatusOverlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#EE031326"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="32dp"
+                    android:visibility="gone">
+
+                    <ProgressBar
+                        android:id="@+id/modelProgress"
+                        style="?android:attr/progressBarStyleLarge"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:indeterminateTint="#55E7D0" />
+
+                    <TextView
+                        android:id="@+id/viewerStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:gravity="center"
+                        android:text="Preparing 3D model…"
+                        android:textColor="#DCEAFF"
+                        android:textSize="15sp" />
+
+                    <LinearLayout
+                        android:id="@+id/viewerStatusActions"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="18dp"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/retryModelButton"
+                            android:layout_width="104dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_filter_chip_selected"
+                            android:gravity="center"
+                            android:text="Retry"
+                            android:textColor="#FFFFFF"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/closeStatusButton"
+                            android:layout_width="104dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/bg_filter_chip"
+                            android:gravity="center"
+                            android:text="Close"
+                            android:textColor="#DCEAFF"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/orientationIndicator"
@@ -154,6 +205,7 @@
                 </LinearLayout>
 
                 <HorizontalScrollView
+                    android:id="@+id/viewerControlContainer"
                     android:layout_width="wrap_content"
                     android:layout_height="54dp"
                     android:layout_gravity="bottom|center_horizontal"
@@ -201,6 +253,15 @@
                             android:textSize="13sp"
                             android:textStyle="bold"
                             android:tooltipText="Rotation speed" />
+
+                        <TextView
+                            android:id="@+id/cameraViewButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Change camera view"
+                            android:text="FR"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:tooltipText="Camera view" />
 
                         <TextView
                             android:id="@+id/resetViewButton"
@@ -251,6 +312,23 @@
                         android:textSize="30sp"
                         android:tooltipText="Close full screen" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/fullScreenHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|center_horizontal"
+                    android:layout_marginTop="82dp"
+                    android:background="@drawable/bg_control_bar"
+                    android:gravity="center"
+                    android:paddingStart="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="10dp"
+                    android:text="Drag to rotate  •  Double-tap to focus  •  Tap to show controls"
+                    android:textColor="#E4ECF8"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <TextView

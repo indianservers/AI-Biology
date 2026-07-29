@@ -13,6 +13,7 @@
         android:theme="@style/Theme.Biology">
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:exported="true"
             android:theme="@style/Theme.Biology">
             <intent-filter>
