@@ -7,8 +7,23 @@
     <string name="next">Next</string>
     <string name="previous">Previous</string>
     <string name="model_browser_title">Biology 3D Models</string>
-    <string name="model_browser_help">Drag to rotate. Pinch to zoom. Cached models open instantly from local storage.</string>
+    <string name="model_browser_tagline">Explore. Learn. Understand Life.</string>
+    <string name="model_browser_help">Swipe to rotate model</string>
     <string name="selected_model">%1$s - %2$s</string>
+    <string name="model_type_label">3D Model</string>
+    <string name="quiz">Quiz</string>
+    <string name="learn_more">Learn more  &gt;</string>
+    <string name="back_arrow">&lt;</string>
+    <string name="dna_badge">DNA</string>
+    <string name="model_thumb">3D</string>
+    <string name="control_360">360\n360</string>
+    <string name="control_rotate">Rotate</string>
+    <string name="control_zoom">Zoom</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_explore">Explore</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_progress">Progress</string>
+    <string name="nav_profile">Profile</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris

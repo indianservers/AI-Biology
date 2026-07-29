@@ -1,8 +1,11 @@
 package com.indianservers.biology
 
 import android.annotation.SuppressLint
+import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,7 +13,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.SimpleAdapter
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
 
@@ -18,22 +22,21 @@ class FirstFragment : Fragment() {
 
     private var _binding: FragmentFirstBinding? = null
     private val binding get() = _binding!!
+    private var selectedModelIndex = 0
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-
         _binding = FragmentFirstBinding.inflate(inflater, container, false)
         return binding.root
-
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         configureViewer()
-        configureModelList()
+        configureModelStrip()
     }
 
     override fun onDestroyView() {
@@ -45,6 +48,7 @@ class FirstFragment : Fragment() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureViewer() {
         binding.modelWebView.apply {
+            setBackgroundColor(Color.TRANSPARENT)
             webViewClient = WebViewClient()
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -61,26 +65,75 @@ class FirstFragment : Fragment() {
         }
     }
 
-    private fun configureModelList() {
-        val adapter = SimpleAdapter(
-            requireContext(),
-            MODEL_CATALOG.map { mapOf("title" to it.title, "subtitle" to it.subtitle) },
-            android.R.layout.simple_list_item_activated_2,
-            arrayOf("title", "subtitle"),
-            intArrayOf(android.R.id.text1, android.R.id.text2)
-        )
+    private fun configureModelStrip() {
+        binding.modelStrip.removeAllViews()
 
-        binding.modelList.adapter = adapter
-        binding.modelList.setOnItemClickListener { _, _, position, _ ->
-            loadModel(MODEL_CATALOG[position])
+        MODEL_CATALOG.forEachIndexed { index, model ->
+            binding.modelStrip.addView(createModelStripItem(index, model))
         }
 
-        binding.modelList.setItemChecked(0, true)
-        loadModel(MODEL_CATALOG.first())
+        selectModel(0)
+    }
+
+    private fun createModelStripItem(index: Int, model: BiologyModel): View {
+        val item = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(4.dp, 0, 4.dp, 0)
+            layoutParams = LinearLayout.LayoutParams(96.dp, ViewGroup.LayoutParams.MATCH_PARENT)
+            setOnClickListener { selectModel(index) }
+        }
+
+        val badge = TextView(requireContext()).apply {
+            width = 72.dp
+            height = 72.dp
+            gravity = Gravity.CENTER
+            text = model.badge
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            background = requireContext().getDrawable(
+                if (index == selectedModelIndex) R.drawable.bg_thumbnail_selected else R.drawable.bg_thumbnail
+            )
+        }
+
+        val label = TextView(requireContext()).apply {
+            width = ViewGroup.LayoutParams.MATCH_PARENT
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            gravity = Gravity.CENTER
+            maxLines = 2
+            text = model.shortTitle
+            setTextColor(if (index == selectedModelIndex) selectedTextColor else inactiveTextColor)
+            textSize = 12f
+        }
+
+        item.addView(badge)
+        item.addView(label)
+        return item
+    }
+
+    private fun selectModel(index: Int) {
+        selectedModelIndex = index
+
+        MODEL_CATALOG.forEachIndexed { childIndex, _ ->
+            val item = binding.modelStrip.getChildAt(childIndex) as? LinearLayout
+            val badge = item?.getChildAt(0) as? TextView
+            val label = item?.getChildAt(1) as? TextView
+
+            badge?.background = requireContext().getDrawable(
+                if (childIndex == selectedModelIndex) R.drawable.bg_thumbnail_selected else R.drawable.bg_thumbnail
+            )
+            label?.setTextColor(if (childIndex == selectedModelIndex) selectedTextColor else inactiveTextColor)
+        }
+
+        loadModel(MODEL_CATALOG[index])
     }
 
     private fun loadModel(model: BiologyModel) {
-        binding.selectedModelText.text = getString(R.string.selected_model, model.title, model.subtitle)
+        binding.modelTitle.text = model.title
+        binding.featureTitle.text = model.featureTitle
+        binding.featureDescription.text = model.description
+        binding.featureThumb.text = model.badge
 
         if (isBundledModelAvailable(model.fileName)) {
             binding.modelProgress.visibility = View.VISIBLE
@@ -104,21 +157,24 @@ class FirstFragment : Fragment() {
     private companion object {
         const val MODEL_ASSET_DIRECTORY = "biology/3d"
 
+        val selectedTextColor: Int = Color.parseColor("#AFA3FF")
+        val inactiveTextColor: Int = Color.parseColor("#98A8C2")
+
         val MODEL_CATALOG = listOf(
-            BiologyModel("Bacteriacell.glb", "Bacteria Cell", "prokaryotic cell structure"),
-            BiologyModel("Cell Membrane.glb", "Cell Membrane", "selective barrier and transport"),
-            BiologyModel("Chloroplast.glb", "Chloroplast", "photosynthesis organelle"),
-            BiologyModel("epithelial microvilli.glb", "Epithelial Microvilli", "surface absorption structures"),
-            BiologyModel("Lysosome.glb", "Lysosome", "cellular digestion vesicle"),
-            BiologyModel("Mitochondrion.glb", "Mitochondrion", "cell energy organelle"),
-            BiologyModel("Neuron.glb", "Neuron", "nerve impulse cell"),
-            BiologyModel("plant cell wall.glb", "Plant Cell Wall", "rigid plant cell support"),
-            BiologyModel("PlantCell.glb", "Plant Cell", "complete plant cell model"),
-            BiologyModel("Ribosomes.glb", "Ribosomes", "protein synthesis machinery"),
-            BiologyModel("Rough Endoplasmic Reticulum.glb", "Rough Endoplasmic Reticulum", "protein folding network"),
-            BiologyModel("Smooth Endoplasmic Reticulum.glb", "Smooth Endoplasmic Reticulum", "lipid synthesis network"),
-            BiologyModel("Vacuole.glb", "Vacuole", "storage and pressure compartment"),
-            BiologyModel("WhiteBloodCell.glb", "White Blood Cell", "immune defense cell")
+            BiologyModel("Bacteriacell.glb", "Bacteria Cell", "Bacteria", "BC", "Prokaryote", "A compact prokaryotic model showing the cell envelope, cytoplasm, and internal organization."),
+            BiologyModel("Cell Membrane.glb", "Cell Membrane", "Membrane", "CM", "Selective barrier", "The membrane controls movement in and out of the cell through a flexible phospholipid boundary."),
+            BiologyModel("Chloroplast.glb", "Chloroplast", "Chloroplast", "CH", "Photosynthesis", "Chloroplasts capture light energy and convert it into chemical energy in plant cells."),
+            BiologyModel("epithelial microvilli.glb", "Epithelial Microvilli", "Microvilli", "MV", "Absorption", "Microvilli increase surface area so epithelial cells can absorb nutrients efficiently."),
+            BiologyModel("Lysosome.glb", "Lysosome", "Lysosome", "LY", "Cell recycling", "Lysosomes break down waste, worn cell parts, and foreign material using digestive enzymes."),
+            BiologyModel("Mitochondrion.glb", "Mitochondrion", "Mitochondria", "MT", "Cell energy", "Mitochondria generate ATP, the usable energy that powers many cell processes."),
+            BiologyModel("Neuron.glb", "Neuron", "Neuron", "NE", "Nerve signals", "Neurons transmit electrical and chemical signals across the nervous system."),
+            BiologyModel("plant cell wall.glb", "Plant Cell Wall", "Cell Wall", "CW", "Plant support", "The cell wall gives plant cells structure, protection, and mechanical strength."),
+            BiologyModel("PlantCell.glb", "Plant Cell", "Plant Cell", "PC", "Complete cell", "A full plant cell model with major organelles arranged inside a rigid boundary."),
+            BiologyModel("Ribosomes.glb", "Ribosomes", "Ribosomes", "RB", "Protein synthesis", "Ribosomes read genetic instructions and assemble amino acids into proteins."),
+            BiologyModel("Rough Endoplasmic Reticulum.glb", "Rough Endoplasmic Reticulum", "Rough ER", "ER", "Protein network", "Rough ER helps fold and process proteins before they move through the cell."),
+            BiologyModel("Smooth Endoplasmic Reticulum.glb", "Smooth Endoplasmic Reticulum", "Smooth ER", "SE", "Lipid network", "Smooth ER supports lipid synthesis, detoxification, and calcium storage."),
+            BiologyModel("Vacuole.glb", "Vacuole", "Vacuole", "VA", "Storage", "Vacuoles store water and solutes while helping maintain pressure in plant cells."),
+            BiologyModel("WhiteBloodCell.glb", "White Blood Cell", "WBC", "WB", "Immune defense", "White blood cells identify threats and help protect the body from infection.")
         )
     }
 }
@@ -126,5 +182,11 @@ class FirstFragment : Fragment() {
 private data class BiologyModel(
     val fileName: String,
     val title: String,
-    val subtitle: String
+    val shortTitle: String,
+    val badge: String,
+    val featureTitle: String,
+    val description: String
 )
+
+private val Int.dp: Int
+    get() = (this * android.content.res.Resources.getSystem().displayMetrics.density).toInt()
