@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <script type="module" src="./model-viewer.min.js"></script>
     <style>
+        * { box-sizing: border-box; }
+
         html, body {
             width: 100%;
             height: 100%;
             margin: 0;
             overflow: hidden;
-            background: #101815;
+            background: #031326;
             color: #f4faf7;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             touch-action: none;
@@ -19,9 +21,12 @@
         model-viewer {
             width: 100%;
             height: 100%;
-            background: radial-gradient(circle at 50% 42%, #08264a 0%, #031427 58%, #010815 100%);
+            background:
+                radial-gradient(circle at 50% 42%, rgba(24, 94, 151, 0.52), transparent 42%),
+                #031326;
+            touch-action: none;
             --poster-color: transparent;
-            --progress-bar-color: #6fe0a5;
+            --progress-bar-color: #55e7d0;
             --progress-mask: transparent;
         }
 
@@ -30,123 +35,50 @@
             inset: 0;
             display: grid;
             place-items: center;
-            padding: 24px;
+            padding: 36px;
             text-align: center;
-            color: #dce8e2;
+            color: #b9c8dc;
+            font-size: 15px;
+            line-height: 1.55;
             pointer-events: none;
         }
 
-        .fallback {
+        .hotspot {
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            background: #7c4dff;
+            box-shadow: 0 0 0 6px rgba(124, 77, 255, 0.24), 0 0 18px #8d68ff;
+        }
+
+        .hotspot::after {
+            content: attr(data-label);
             position: absolute;
-            inset: 0;
+            left: 18px;
+            top: -13px;
             display: none;
-            place-items: center;
-            perspective: 900px;
-            background:
-                radial-gradient(circle at 50% 42%, rgba(80, 166, 255, 0.34), transparent 36%),
-                radial-gradient(circle at 40% 58%, rgba(137, 76, 255, 0.2), transparent 30%),
-                #031326;
-            overflow: hidden;
-        }
-
-        .fallback::before {
-            content: "";
-            position: absolute;
-            inset: 10%;
-            background-image:
-                radial-gradient(circle, rgba(93, 210, 255, 0.55) 0 1px, transparent 2px),
-                radial-gradient(circle, rgba(168, 93, 255, 0.45) 0 1px, transparent 2px);
-            background-position: 0 0, 32px 42px;
-            background-size: 86px 86px, 120px 120px;
-            opacity: 0.36;
-        }
-
-        .cell {
-            position: relative;
-            width: min(82vw, 430px);
-            aspect-ratio: 1;
-            transform-style: preserve-3d;
-            transform: rotateX(var(--rx, -10deg)) rotateY(var(--ry, 22deg)) scale(var(--scale, 1));
-            transition: transform 80ms linear;
-        }
-
-        .membrane {
-            position: absolute;
-            inset: 8%;
-            border-radius: 50%;
-            background:
-                radial-gradient(circle at 45% 42%, rgba(255, 255, 255, 0.42), transparent 15%),
-                radial-gradient(circle at 50% 52%, rgba(106, 91, 244, 0.46), rgba(25, 128, 221, 0.44) 48%, rgba(92, 203, 255, 0.22) 67%, rgba(23, 74, 130, 0.1) 72%);
-            border: 3px solid rgba(126, 209, 255, 0.72);
-            box-shadow:
-                inset 0 0 54px rgba(150, 220, 255, 0.55),
-                inset -26px -24px 60px rgba(64, 27, 150, 0.48),
-                0 0 52px rgba(82, 171, 255, 0.45);
-        }
-
-        .nucleus {
-            position: absolute;
-            left: 35%;
-            top: 32%;
-            width: 31%;
-            aspect-ratio: 1;
-            border-radius: 50%;
-            background:
-                radial-gradient(circle at 44% 42%, #ffb8ff 0 8%, #b961ff 28%, #6c36d5 58%, #351068 100%);
-            box-shadow:
-                inset 0 0 24px rgba(255, 255, 255, 0.52),
-                0 0 42px rgba(181, 80, 255, 0.8);
-            transform: translateZ(90px);
-        }
-
-        .organelle {
-            position: absolute;
-            border-radius: 50%;
-            transform-style: preserve-3d;
-            box-shadow: inset 0 0 14px rgba(255,255,255,0.35), 0 0 18px currentColor;
-        }
-
-        .mito {
-            width: 20%;
-            height: 10%;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 45%, #ffd3a2, #ff6d2f 48%, #802208 100%);
-            color: #ff7d3f;
-        }
-
-        .blue {
-            background: radial-gradient(circle at 40% 40%, #9ee8ff, #1599ff 54%, #055092 100%);
-            color: #28c7ff;
-        }
-
-        .green {
-            background: radial-gradient(circle at 40% 40%, #9fffc3, #25d26d 52%, #075323 100%);
-            color: #28e682;
-        }
-
-        .purple {
-            background: radial-gradient(circle at 40% 40%, #f1aaff, #a855f7 52%, #42136f 100%);
-            color: #b66dff;
-        }
-
-        .o1 { left: 19%; top: 33%; transform: translateZ(55px) rotate(-18deg); }
-        .o2 { right: 20%; bottom: 23%; transform: translateZ(72px) rotate(12deg); }
-        .o3 { left: 22%; bottom: 26%; width: 13%; aspect-ratio: 1; transform: translateZ(48px); }
-        .o4 { right: 23%; top: 24%; width: 12%; aspect-ratio: 1; transform: translateZ(64px); }
-        .o5 { left: 47%; top: 18%; width: 12%; aspect-ratio: 1; transform: translateZ(40px); }
-        .o6 { right: 34%; top: 67%; width: 10%; aspect-ratio: 1; transform: translateZ(78px); }
-
-        .model-label {
-            position: absolute;
-            left: 50%;
-            bottom: 24px;
-            transform: translateX(-50%);
-            color: rgba(225, 235, 255, 0.76);
+            width: max-content;
+            max-width: 170px;
+            padding: 8px 11px;
+            border: 1px solid #936cff;
+            border-radius: 6px;
+            background: rgba(12, 16, 44, 0.94);
+            color: #fff;
+            font-size: 13px;
             font-weight: 700;
-            letter-spacing: 0;
-            text-align: center;
+            line-height: 1.2;
             pointer-events: none;
         }
+
+        .hotspot.selected {
+            background: #55e7d0;
+            box-shadow: 0 0 0 6px rgba(85, 231, 208, 0.22), 0 0 20px #55e7d0;
+        }
+
+        .hotspot.selected::after { display: block; }
+        .hotspot[hidden] { display: none; }
     </style>
 </head>
 <body>
@@ -154,111 +86,87 @@
     id="viewer"
     camera-controls
     auto-rotate
-    ar
+    auto-rotate-delay="1800"
+    rotation-per-second="18deg"
     interaction-prompt="auto"
+    interaction-prompt-threshold="1200"
+    disable-tap
     exposure="1"
     shadow-intensity="0.7"
     camera-orbit="0deg 72deg auto"
-    min-camera-orbit="auto auto 12%"
-    max-camera-orbit="auto auto 500%">
+    min-camera-orbit="auto 5deg 12%"
+    max-camera-orbit="auto 175deg 500%">
 </model-viewer>
-<div id="fallback" class="fallback">
-    <div id="cell" class="cell">
-        <div class="membrane"></div>
-        <div class="nucleus"></div>
-        <div class="organelle mito o1"></div>
-        <div class="organelle mito o2"></div>
-        <div class="organelle blue o3"></div>
-        <div class="organelle green o4"></div>
-        <div class="organelle purple o5"></div>
-        <div class="organelle blue o6"></div>
-    </div>
-    <div id="modelLabel" class="model-label"></div>
-</div>
-<div id="message" class="message">Loading model...</div>
+<div id="message" class="message">Loading 3D model...</div>
 
 <script>
     const params = new URLSearchParams(window.location.search);
     const src = params.get("src");
-    const model = params.get("model");
-    const title = params.get("title");
-    const fallbackName = params.get("fallback");
+    const title = params.get("title") || "Biology model";
+    const missing = params.get("missing") === "1";
     const viewer = document.getElementById("viewer");
-    const fallback = document.getElementById("fallback");
-    const cell = document.getElementById("cell");
-    const modelLabel = document.getElementById("modelLabel");
     const message = document.getElementById("message");
-    let rx = -10;
-    let ry = 22;
-    let scale = 1;
-    let dragging = false;
-    let lastX = 0;
-    let lastY = 0;
+    let parts = [];
+
+    try {
+        parts = JSON.parse(params.get("parts") || "[]");
+    } catch (_) {
+        parts = [];
+    }
 
     if (src) {
         viewer.src = src;
-    } else if (model) {
-        viewer.src = `biology/3d/${model}`;
-    } else if (fallbackName) {
-        showFallback(title || fallbackName);
+    } else if (missing) {
+        viewer.style.display = "none";
+        message.innerHTML = `<strong>${escapeHtml(title)}</strong><br>This model is listed but has not been downloaded to this device yet.`;
     } else {
         message.textContent = "Select a model to begin.";
     }
 
     viewer.addEventListener("load", () => {
+        addHotspots();
         message.style.display = "none";
     });
 
     viewer.addEventListener("error", () => {
-        showFallback(title || model || "Biology Model");
-    });
-
-    function showFallback(name) {
         viewer.style.display = "none";
-        fallback.style.display = "grid";
-        message.style.display = "none";
-        modelLabel.textContent = name;
-        tintFallback(name);
-    }
-
-    function tintFallback(name) {
-        const hue = Math.abs([...name].reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 360;
-        cell.style.filter = `hue-rotate(${hue}deg) saturate(1.12)`;
-    }
-
-    function updateTransform() {
-        cell.style.setProperty("--rx", `${rx}deg`);
-        cell.style.setProperty("--ry", `${ry}deg`);
-        cell.style.setProperty("--scale", scale);
-    }
-
-    fallback.addEventListener("pointerdown", (event) => {
-        dragging = true;
-        lastX = event.clientX;
-        lastY = event.clientY;
-        fallback.setPointerCapture(event.pointerId);
+        message.innerHTML = `<strong>${escapeHtml(title)}</strong><br>The 3D file could not be opened. Download it again and retry.`;
     });
 
-    fallback.addEventListener("pointermove", (event) => {
-        if (!dragging) return;
-        ry += (event.clientX - lastX) * 0.45;
-        rx -= (event.clientY - lastY) * 0.32;
-        rx = Math.max(-55, Math.min(55, rx));
-        lastX = event.clientX;
-        lastY = event.clientY;
-        updateTransform();
-    });
+    function addHotspots() {
+        parts.forEach((part, index) => {
+            const hotspot = document.createElement("button");
+            hotspot.type = "button";
+            hotspot.className = "hotspot";
+            hotspot.slot = `hotspot-${index}`;
+            hotspot.dataset.position = part.position;
+            hotspot.dataset.normal = part.normal || "0 0 1";
+            hotspot.dataset.label = part.title;
+            hotspot.setAttribute("aria-label", `Identify ${part.title}`);
+            hotspot.addEventListener("click", event => {
+                event.stopPropagation();
+                selectPart(index);
+                if (window.BiologyBridge) {
+                    window.BiologyBridge.onPartSelected(index);
+                }
+            });
+            viewer.appendChild(hotspot);
+        });
 
-    fallback.addEventListener("pointerup", () => {
-        dragging = false;
-    });
+        if (parts.length) selectPart(0);
+    }
 
-    fallback.addEventListener("wheel", (event) => {
-        event.preventDefault();
-        scale += event.deltaY > 0 ? -0.06 : 0.06;
-        scale = Math.max(0.72, Math.min(1.55, scale));
-        updateTransform();
-    }, { passive: false });
+    window.selectPart = function(index) {
+        viewer.querySelectorAll(".hotspot").forEach((hotspot, itemIndex) => {
+            hotspot.classList.toggle("selected", itemIndex === Number(index));
+        });
+    };
+
+    function escapeHtml(value) {
+        const node = document.createElement("div");
+        node.textContent = value;
+        return node.innerHTML;
+    }
 </script>
 </body>
 </html>
