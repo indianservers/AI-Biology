@@ -179,6 +179,7 @@
 
 <script>
     const params = new URLSearchParams(window.location.search);
+    const src = params.get("src");
     const model = params.get("model");
     const title = params.get("title");
     const fallbackName = params.get("fallback");
@@ -194,7 +195,9 @@
     let lastX = 0;
     let lastY = 0;
 
-    if (model) {
+    if (src) {
+        viewer.src = src;
+    } else if (model) {
         viewer.src = `biology/3d/${model}`;
     } else if (fallbackName) {
         showFallback(title || fallbackName);

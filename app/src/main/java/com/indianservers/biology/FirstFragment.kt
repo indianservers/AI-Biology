@@ -10,6 +10,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -17,6 +19,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
+import java.io.File
+import java.io.FileInputStream
 
 class FirstFragment : Fragment() {
 
@@ -24,6 +28,7 @@ class FirstFragment : Fragment() {
     private val binding get() = _binding!!
     private var selectedModelIndex = 0
     private var selectedPartIndex = 0
+    private lateinit var modelStorageDirectory: File
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -36,6 +41,7 @@ class FirstFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
         configureViewer()
         configurePartList()
         configureModelStrip()
@@ -51,7 +57,28 @@ class FirstFragment : Fragment() {
     private fun configureViewer() {
         binding.modelWebView.apply {
             setBackgroundColor(Color.TRANSPARENT)
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val uri = request?.url ?: return null
+                    if (uri.host != MODEL_HOST || !uri.path.orEmpty().startsWith("/models/")) {
+                        return null
+                    }
+
+                    val fileName = uri.lastPathSegment ?: return null
+                    val modelFile = findExternalModel(fileName) ?: return null
+                    return WebResourceResponse(
+                        GLB_MIME_TYPE,
+                        null,
+                        200,
+                        "OK",
+                        mapOf("Access-Control-Allow-Origin" to "*"),
+                        FileInputStream(modelFile)
+                    )
+                }
+            }
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                     binding.modelProgress.visibility =
@@ -63,6 +90,8 @@ class FirstFragment : Fragment() {
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
             settings.allowContentAccess = true
+            settings.allowFileAccessFromFileURLs = true
+            settings.allowUniversalAccessFromFileURLs = true
             settings.cacheMode = WebSettings.LOAD_DEFAULT
         }
     }
@@ -70,7 +99,7 @@ class FirstFragment : Fragment() {
     private fun configureModelStrip() {
         binding.modelStrip.removeAllViews()
 
-        MODEL_CATALOG.forEachIndexed { index, model ->
+        availableModels().forEachIndexed { index, model ->
             binding.modelStrip.addView(createModelStripItem(index, model))
         }
 
@@ -81,6 +110,18 @@ class FirstFragment : Fragment() {
         binding.partsList.removeAllViews()
         CELL_PARTS.forEachIndexed { index, part ->
             binding.partsList.addView(createPartRow(index, part))
+        }
+        binding.cellPartsPanel.setOnClickListener {
+            binding.partsList.visibility = collapseOrExpand(binding.partsList.visibility)
+        }
+        binding.toolRail.setOnClickListener {
+            binding.toolRail.visibility = View.GONE
+        }
+        binding.infoPanel.setOnClickListener {
+            binding.actionRow.visibility = collapseOrExpand(binding.actionRow.visibility)
+        }
+        binding.modelStripContainer.setOnClickListener {
+            binding.modelStrip.visibility = collapseOrExpand(binding.modelStrip.visibility)
         }
         selectPart(0)
     }
@@ -147,8 +188,9 @@ class FirstFragment : Fragment() {
 
     private fun selectModel(index: Int) {
         selectedModelIndex = index
+        val models = availableModels()
 
-        MODEL_CATALOG.forEachIndexed { childIndex, _ ->
+        models.forEachIndexed { childIndex, _ ->
             val item = binding.modelStrip.getChildAt(childIndex) as? LinearLayout
             val badge = item?.getChildAt(0) as? TextView
             val label = item?.getChildAt(1) as? TextView
@@ -159,7 +201,7 @@ class FirstFragment : Fragment() {
             label?.setTextColor(if (childIndex == selectedModelIndex) selectedTextColor else inactiveTextColor)
         }
 
-        loadModel(MODEL_CATALOG[index])
+        loadModel(models[index])
     }
 
     private fun selectPart(index: Int) {
@@ -182,7 +224,17 @@ class FirstFragment : Fragment() {
         binding.modelTitle.text = model.title
         binding.featureThumb.text = model.badge
 
-        if (isBundledModelAvailable(model.fileName)) {
+        val localModelUri = findExternalModel(model.fileName)?.let {
+            "https://$MODEL_HOST/models/${Uri.encode(model.fileName)}"
+        }
+
+        if (localModelUri != null) {
+            binding.modelProgress.visibility = View.VISIBLE
+            binding.modelWebView.loadUrl(
+                "file:///android_asset/model_viewer.html?src=${Uri.encode(localModelUri)}" +
+                    "&title=${Uri.encode(model.title)}"
+            )
+        } else if (isBundledModelAvailable(model.fileName)) {
             binding.modelProgress.visibility = View.VISIBLE
             binding.modelWebView.loadUrl(
                 "file:///android_asset/model_viewer.html?model=${Uri.encode(model.fileName)}"
@@ -196,6 +248,22 @@ class FirstFragment : Fragment() {
         }
     }
 
+    private fun collapseOrExpand(currentVisibility: Int): Int =
+        if (currentVisibility == View.VISIBLE) View.GONE else View.VISIBLE
+
+    private fun findExternalModel(fileName: String): File? {
+        val modelFile = File(modelStorageDirectory, fileName)
+        return modelFile.takeIf { it.exists() && it.length() > 0 }
+    }
+
+    private fun availableModels(): List<BiologyModel> {
+        val available = MODEL_CATALOG.filter {
+            findExternalModel(it.fileName) != null || isBundledModelAvailable(it.fileName)
+        }
+
+        return available.ifEmpty { MODEL_CATALOG }
+    }
+
     private fun isBundledModelAvailable(fileName: String): Boolean =
         requireContext().assets
             .list(MODEL_ASSET_DIRECTORY)
@@ -203,6 +271,8 @@ class FirstFragment : Fragment() {
 
     private companion object {
         const val MODEL_ASSET_DIRECTORY = "biology/3d"
+        const val MODEL_HOST = "biology.local"
+        const val GLB_MIME_TYPE = "model/gltf-binary"
 
         val selectedTextColor: Int = Color.parseColor("#AFA3FF")
         val inactiveTextColor: Int = Color.parseColor("#98A8C2")
