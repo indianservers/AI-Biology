@@ -7,6 +7,59 @@
     android:background="@drawable/bg_biology_screen"
     tools:context=".FirstFragment">
 
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/topAppBar"
+        android:layout_width="0dp"
+        android:layout_height="76dp"
+        android:background="#F2051427"
+        android:paddingStart="18dp"
+        android:paddingEnd="14dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/screenTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Biology Explorer"
+            android:textColor="#FFFFFF"
+            android:textSize="19sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/modelTitle" />
+
+        <TextView
+            android:id="@+id/modelTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#8FE7D4"
+            android:textSize="13sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/modelAvailability"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:text="Bacteria Cell" />
+
+        <TextView
+            android:id="@+id/modelAvailability"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:background="@drawable/bg_status_ready"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="READY"
+            android:textColor="#9AF5D9"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
     <ScrollView
         android:id="@+id/contentScroll"
         android:layout_width="0dp"
@@ -16,80 +69,22 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/topAppBar">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingStart="18dp"
-            android:paddingTop="24dp"
-            android:paddingEnd="18dp"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
             android:paddingBottom="28dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Biology Explorer"
-                android:textColor="#FFFFFF"
-                android:textSize="28sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/modelType"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="Interactive 3D anatomy"
-                android:textColor="#55E7D0"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/modelSelectorHeader"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/bg_parts_panel"
-                android:gravity="center_vertical"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="Models  -  tap to collapse"
-                android:textColor="#FFFFFF"
-                android:textSize="17sp"
-                android:textStyle="bold" />
-
-            <HorizontalScrollView
-                android:id="@+id/modelStripContainer"
-                android:layout_width="match_parent"
-                android:layout_height="116dp"
-                android:layout_marginTop="8dp"
-                android:overScrollMode="never"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:id="@+id/modelStrip"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal" />
-            </HorizontalScrollView>
-
-            <TextView
-                android:id="@+id/modelTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:textColor="#FFFFFF"
-                android:textSize="27sp"
-                android:textStyle="bold"
-                tools:text="Bacteria Cell" />
 
             <FrameLayout
                 android:id="@+id/viewerContainer"
                 android:layout_width="match_parent"
-                android:layout_height="440dp"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_parts_panel">
+                android:layout_height="500dp"
+                android:background="@drawable/bg_surface_panel">
 
                 <WebView
                     android:id="@+id/modelWebView"
@@ -107,12 +102,65 @@
                     android:indeterminateTint="#55E7D0"
                     android:visibility="gone" />
 
+                <TextView
+                    android:id="@+id/orientationIndicator"
+                    android:layout_width="58dp"
+                    android:layout_height="58dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/bg_orientation_indicator"
+                    android:gravity="center"
+                    android:text="FRONT"
+                    android:textColor="#DCEAFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:tooltipText="Current model orientation" />
+
+                <LinearLayout
+                    android:id="@+id/zoomControls"
+                    android:layout_width="50dp"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/bg_control_bar"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/zoomInButton"
+                        style="@style/BiologyViewerControl"
+                        android:contentDescription="Zoom in"
+                        android:text="+"
+                        android:tooltipText="Zoom in" />
+
+                    <TextView
+                        android:id="@+id/zoomLevel"
+                        android:layout_width="match_parent"
+                        android:layout_height="30dp"
+                        android:gravity="center"
+                        android:text="100%"
+                        android:textColor="#9FB3CF"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:id="@+id/zoomOutButton"
+                        style="@style/BiologyViewerControl"
+                        android:contentDescription="Zoom out"
+                        android:text="−"
+                        android:tooltipText="Zoom out" />
+                </LinearLayout>
+
                 <HorizontalScrollView
                     android:layout_width="wrap_content"
-                    android:layout_height="56dp"
+                    android:layout_height="54dp"
                     android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="10dp"
                     android:layout_marginBottom="12dp"
-                    android:background="@drawable/bg_control_rail"
+                    android:background="@drawable/bg_control_bar"
                     android:scrollbars="none">
 
                     <LinearLayout
@@ -121,59 +169,88 @@
                         android:layout_height="match_parent"
                         android:gravity="center"
                         android:orientation="horizontal"
-                        android:paddingStart="6dp"
-                        android:paddingEnd="6dp">
+                        android:paddingStart="5dp"
+                        android:paddingEnd="5dp">
 
                         <TextView
                             android:id="@+id/rotateLeftButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Rotate left"
-                            android:tooltipText="Rotate left"
-                            android:text="↶" />
+                            android:text="↶"
+                            android:tooltipText="Rotate left" />
 
                         <TextView
                             android:id="@+id/rotationButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Pause automatic rotation"
-                            android:tooltipText="Pause automatic rotation"
-                            android:text="Ⅱ" />
+                            android:text="Ⅱ"
+                            android:tooltipText="Pause automatic rotation" />
 
                         <TextView
                             android:id="@+id/rotateRightButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Rotate right"
-                            android:tooltipText="Rotate right"
-                            android:text="↷" />
+                            android:text="↷"
+                            android:tooltipText="Rotate right" />
 
                         <TextView
-                            android:id="@+id/zoomOutButton"
+                            android:id="@+id/rotationSpeedButton"
                             style="@style/BiologyViewerControl"
-                            android:contentDescription="Zoom out"
-                            android:tooltipText="Zoom out"
-                            android:text="−" />
-
-                        <TextView
-                            android:id="@+id/zoomInButton"
-                            style="@style/BiologyViewerControl"
-                            android:contentDescription="Zoom in"
-                            android:tooltipText="Zoom in"
-                            android:text="+" />
+                            android:contentDescription="Change rotation speed"
+                            android:text="1×"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:tooltipText="Rotation speed" />
 
                         <TextView
                             android:id="@+id/resetViewButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Reset view"
-                            android:tooltipText="Reset view"
-                            android:text="⌂" />
+                            android:text="⌂"
+                            android:tooltipText="Reset view" />
 
                         <TextView
                             android:id="@+id/fullScreenButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Open full screen"
-                            android:tooltipText="Open full screen"
-                            android:text="⛶" />
+                            android:text="⛶"
+                            android:tooltipText="Open full screen" />
                     </LinearLayout>
                 </HorizontalScrollView>
+
+                <LinearLayout
+                    android:id="@+id/fullScreenTopBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:layout_gravity="top"
+                    android:background="#E6031326"
+                    android:elevation="16dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="18dp"
+                    android:paddingEnd="10dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/fullScreenTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:maxLines="1"
+                        android:textColor="#FFFFFF"
+                        android:textSize="19sp"
+                        android:textStyle="bold"
+                        tools:text="Bacteria Cell" />
+
+                    <TextView
+                        android:id="@+id/fullScreenClose"
+                        style="@style/BiologyViewerControl"
+                        android:contentDescription="Close full screen"
+                        android:text="×"
+                        android:textSize="30sp"
+                        android:tooltipText="Close full screen" />
+                </LinearLayout>
             </FrameLayout>
 
             <TextView
@@ -181,24 +258,132 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:paddingTop="10dp"
-                android:paddingBottom="8dp"
-                android:text="Drag for 360° rotation  •  Pinch to zoom"
+                android:paddingTop="9dp"
+                android:paddingBottom="9dp"
+                android:text="Drag to rotate  •  Pinch to zoom  •  Tap a marker"
                 android:textColor="#91A6C5"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/modelSelectorHeader"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_surface_panel"
+                android:drawableEnd="@drawable/ic_chevron_up"
+                android:gravity="center_vertical"
+                android:paddingStart="14dp"
+                android:paddingEnd="12dp"
+                android:text="Explore models"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/modelDiscoveryPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical">
+
+                <EditText
+                    android:id="@+id/modelSearch"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_search_field"
+                    android:drawableStart="@android:drawable/ic_menu_search"
+                    android:drawablePadding="10dp"
+                    android:hint="Search biology models"
+                    android:imeOptions="actionDone"
+                    android:inputType="text"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#7F91AB"
+                    android:textSize="14sp" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/filterStrip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <TextView
+                    android:id="@+id/recentModelsLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Recently viewed"
+                    android:textColor="#DCE6F5"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <HorizontalScrollView
+                    android:id="@+id/recentStripContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="110dp"
+                    android:layout_marginTop="6dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/recentStrip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="All models"
+                    android:textColor="#DCE6F5"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <HorizontalScrollView
+                    android:id="@+id/modelStripContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="118dp"
+                    android:layout_marginTop="6dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/modelStrip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/partsHeader"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_parts_panel"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_surface_panel"
+                android:drawableEnd="@drawable/ic_chevron_up"
                 android:gravity="center_vertical"
                 android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="Identify parts  -  tap to collapse"
+                android:paddingEnd="12dp"
+                android:text="Identify parts"
                 android:textColor="#FFFFFF"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <LinearLayout
@@ -212,8 +397,8 @@
                 android:id="@+id/infoPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_info_panel"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_surface_panel"
                 android:minHeight="128dp"
                 android:padding="18dp">
 
@@ -236,7 +421,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
                     android:textColor="#FFFFFF"
-                    android:textSize="22sp"
+                    android:textSize="21sp"
                     android:textStyle="bold"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toEndOf="@id/featureNumber"
@@ -275,36 +460,5 @@
             android:id="@+id/fullScreenViewerHost"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_gravity="top"
-            android:background="#CC031326"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="18dp"
-            android:paddingEnd="10dp">
-
-            <TextView
-                android:id="@+id/fullScreenTitle"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="center_vertical"
-                android:maxLines="1"
-                android:textColor="#FFFFFF"
-                android:textSize="19sp"
-                android:textStyle="bold"
-                tools:text="Bacteria Cell" />
-
-            <TextView
-                android:id="@+id/fullScreenClose"
-                style="@style/BiologyViewerControl"
-                android:contentDescription="Close full screen"
-                android:tooltipText="Close full screen"
-                android:text="×"
-                android:textSize="30sp" />
-        </LinearLayout>
     </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

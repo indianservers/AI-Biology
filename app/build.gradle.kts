@@ -18,6 +18,8 @@ val requiredBiologyModels = listOf(
     "Vacuole.glb",
     "WhiteBloodCell.glb"
 )
+val omitBundledModels =
+    providers.gradleProperty("omitBundledModels").map(String::toBoolean).getOrElse(false)
 
 android {
     namespace = "com.indianservers.biology"
@@ -55,6 +57,9 @@ android {
     }
     androidResources {
         noCompress += "glb"
+        if (omitBundledModels) {
+            ignoreAssetsPattern = "*.glb"
+        }
     }
 }
 
@@ -75,6 +80,7 @@ val verifyBundledBiologyModels by tasks.registering {
     inputs.dir(modelDirectory)
 
     doLast {
+        if (omitBundledModels) return@doLast
         val missingModels = requiredBiologyModels.filter { modelName ->
             val modelFile = modelDirectory.file(modelName).asFile
             !modelFile.isFile || modelFile.length() == 0L

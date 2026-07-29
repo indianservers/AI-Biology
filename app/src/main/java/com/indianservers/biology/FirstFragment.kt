@@ -1,10 +1,12 @@
 package com.indianservers.biology
 
 import android.annotation.SuppressLint
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.util.Base64
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -17,18 +19,23 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 
 class FirstFragment : Fragment() {
 
@@ -37,7 +44,11 @@ class FirstFragment : Fragment() {
     private var selectedModelIndex = 0
     private var selectedPartIndex = 0
     private var isAutoRotating = true
+    private var rotationSpeedIndex = 1
     private var isFullScreen = false
+    private var activeFilter = FILTER_ALL
+    private var modelQuery = ""
+    private val recentModelIndices = mutableListOf<Int>()
     private var originalViewerParent: ViewGroup? = null
     private var originalViewerIndex = -1
     private var originalViewerLayoutParams: ViewGroup.LayoutParams? = null
@@ -56,10 +67,12 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
+        configureInsets()
+        setSystemBarsVisible(true)
         configureViewer()
         configureViewerControls()
         configureExpanders()
-        configureModelStrip()
+        configureModelDiscovery()
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(false) {
@@ -70,6 +83,29 @@ class FirstFragment : Fragment() {
                 binding.fullScreenOverlay.setTag(R.id.fullScreenOverlay, callback)
             }
         )
+    }
+
+    private fun configureInsets() {
+        val baseHeight = 76.dp
+        val baseStart = binding.topAppBar.paddingStart
+        val baseEnd = binding.topAppBar.paddingEnd
+        ViewCompat.setOnApplyWindowInsetsListener(binding.topAppBar) { view, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.statusBars() or
+                    WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(
+                baseStart + insets.left,
+                insets.top,
+                baseEnd + insets.right,
+                0
+            )
+            view.layoutParams = view.layoutParams.apply {
+                height = baseHeight + insets.top
+            }
+            windowInsets
+        }
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     override fun onDestroyView() {
@@ -144,6 +180,11 @@ class FirstFragment : Fragment() {
         binding.zoomOutButton.setOnClickListener { runViewerCommand("zoomBy(1.2)") }
         binding.zoomInButton.setOnClickListener { runViewerCommand("zoomBy(0.82)") }
         binding.resetViewButton.setOnClickListener { runViewerCommand("resetView()") }
+        binding.rotationSpeedButton.setOnClickListener {
+            rotationSpeedIndex = (rotationSpeedIndex + 1) % ROTATION_SPEEDS.size
+            updateRotationSpeedControl()
+            runViewerCommand("setRotationSpeed(${ROTATION_SPEEDS[rotationSpeedIndex]})")
+        }
         binding.rotationButton.setOnClickListener {
             isAutoRotating = !isAutoRotating
             updateRotationControl()
@@ -153,6 +194,7 @@ class FirstFragment : Fragment() {
             if (isFullScreen) exitFullScreen() else enterFullScreen()
         }
         binding.fullScreenClose.setOnClickListener { exitFullScreen() }
+        updateRotationSpeedControl()
     }
 
     private fun updateRotationControl() {
@@ -160,6 +202,13 @@ class FirstFragment : Fragment() {
         binding.rotationButton.contentDescription =
             if (isAutoRotating) "Pause automatic rotation" else "Resume automatic rotation"
         binding.rotationButton.tooltipText = binding.rotationButton.contentDescription
+    }
+
+    private fun updateRotationSpeedControl() {
+        binding.rotationSpeedButton.text = ROTATION_SPEED_LABELS[rotationSpeedIndex]
+        binding.rotationSpeedButton.contentDescription =
+            "Rotation speed ${ROTATION_SPEED_LABELS[rotationSpeedIndex]}"
+        binding.rotationSpeedButton.tooltipText = binding.rotationSpeedButton.contentDescription
     }
 
     private fun runViewerCommand(command: String) {
@@ -189,6 +238,10 @@ class FirstFragment : Fragment() {
         binding.fullScreenButton.contentDescription = "Close full screen"
         binding.fullScreenButton.tooltipText = "Close full screen"
         binding.fullScreenOverlay.visibility = View.VISIBLE
+        binding.fullScreenTopBar.visibility = View.VISIBLE
+        binding.fullScreenTopBar.bringToFront()
+        binding.fullScreenButton.visibility = View.GONE
+        updateOrientationTopMargin(76.dp)
         (binding.fullScreenOverlay.getTag(R.id.fullScreenOverlay) as? OnBackPressedCallback)
             ?.isEnabled = true
         setSystemBarsVisible(false)
@@ -208,18 +261,30 @@ class FirstFragment : Fragment() {
         binding.fullScreenButton.text = "⛶"
         binding.fullScreenButton.contentDescription = "Open full screen"
         binding.fullScreenButton.tooltipText = "Open full screen"
+        binding.fullScreenButton.visibility = View.VISIBLE
+        updateOrientationTopMargin(12.dp)
+        binding.fullScreenTopBar.visibility = View.GONE
         binding.fullScreenOverlay.visibility = View.GONE
         (binding.fullScreenOverlay.getTag(R.id.fullScreenOverlay) as? OnBackPressedCallback)
             ?.isEnabled = false
         setSystemBarsVisible(true)
     }
 
+    private fun updateOrientationTopMargin(topMargin: Int) {
+        val layoutParams =
+            binding.orientationIndicator.layoutParams as? FrameLayout.LayoutParams ?: return
+        layoutParams.topMargin = topMargin
+        binding.orientationIndicator.layoutParams = layoutParams
+    }
+
     private fun setSystemBarsVisible(visible: Boolean) {
         val window = activity?.window ?: return
-        WindowCompat.setDecorFitsSystemWindows(window, visible)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
             if (visible) {
                 show(WindowInsetsCompat.Type.systemBars())
             } else {
@@ -230,58 +295,150 @@ class FirstFragment : Fragment() {
 
     private fun configureExpanders() {
         binding.modelSelectorHeader.setOnClickListener {
-            binding.modelStripContainer.visibility =
-                toggledVisibility(binding.modelStripContainer.visibility)
-            binding.modelSelectorHeader.text =
-                if (binding.modelStripContainer.visibility == View.VISIBLE) {
-                    "Models  -  tap to collapse"
+            binding.modelDiscoveryPanel.visibility =
+                toggledVisibility(binding.modelDiscoveryPanel.visibility)
+            val icon =
+                if (binding.modelDiscoveryPanel.visibility == View.VISIBLE) {
+                    R.drawable.ic_chevron_up
                 } else {
-                    "Models  +  tap to expand"
+                    R.drawable.ic_chevron_down
                 }
+            binding.modelSelectorHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
         }
 
         binding.partsHeader.setOnClickListener {
             val nextVisibility = toggledVisibility(binding.partsList.visibility)
             binding.partsList.visibility = nextVisibility
             binding.infoPanel.visibility = nextVisibility
-            binding.partsHeader.text =
+            val icon =
                 if (nextVisibility == View.VISIBLE) {
-                    "Identify parts  -  tap to collapse"
+                    R.drawable.ic_chevron_up
                 } else {
-                    "Identify parts  +  tap to expand"
+                    R.drawable.ic_chevron_down
                 }
+            binding.partsHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
         }
     }
 
-    private fun configureModelStrip() {
+    private fun configureModelDiscovery() {
+        recentModelIndices.clear()
+        val savedRecent = requireContext()
+            .getSharedPreferences(PREFERENCES_NAME, 0)
+            .getString(PREFERENCE_RECENT_MODELS, "")
+            .orEmpty()
+        recentModelIndices += savedRecent
+            .split(",")
+            .mapNotNull(String::toIntOrNull)
+            .filter { it in MODEL_CATALOG.indices }
+            .distinct()
+            .take(MAX_RECENT_MODELS)
+
+        FILTERS.forEach { filter ->
+            binding.filterStrip.addView(createFilterChip(filter))
+        }
+        binding.modelSearch.doAfterTextChanged {
+            modelQuery = it?.toString().orEmpty().trim()
+            renderModelCatalog()
+        }
+
+        renderModelCatalog()
+        selectModel(recentModelIndices.firstOrNull() ?: 0)
+    }
+
+    private fun createFilterChip(filter: String): TextView =
+        TextView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                36.dp
+            ).apply {
+                marginEnd = 7.dp
+            }
+            minWidth = 68.dp
+            gravity = Gravity.CENTER
+            setPadding(13.dp, 0, 13.dp, 0)
+            text = filter
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            background = requireContext().getDrawable(
+                if (filter == activeFilter) {
+                    R.drawable.bg_filter_chip_selected
+                } else {
+                    R.drawable.bg_filter_chip
+                }
+            )
+            setOnClickListener {
+                activeFilter = filter
+                updateFilterChips()
+                renderModelCatalog()
+            }
+        }
+
+    private fun updateFilterChips() {
+        repeat(binding.filterStrip.childCount) { childIndex ->
+            val chip = binding.filterStrip.getChildAt(childIndex) as? TextView ?: return@repeat
+            chip.background = requireContext().getDrawable(
+                if (chip.text.toString() == activeFilter) {
+                    R.drawable.bg_filter_chip_selected
+                } else {
+                    R.drawable.bg_filter_chip
+                }
+            )
+        }
+    }
+
+    private fun renderModelCatalog() {
         binding.modelStrip.removeAllViews()
         MODEL_CATALOG.forEachIndexed { index, model ->
-            binding.modelStrip.addView(createModelStripItem(index, model))
+            val matchesFilter =
+                activeFilter == FILTER_ALL || modelCategory(model) == activeFilter
+            val matchesQuery =
+                modelQuery.isBlank() ||
+                    model.title.contains(modelQuery, ignoreCase = true) ||
+                    model.shortTitle.contains(modelQuery, ignoreCase = true)
+            if (matchesFilter && matchesQuery) {
+                binding.modelStrip.addView(createModelStripItem(index, model))
+            }
         }
-        selectModel(0)
+
+        if (binding.modelStrip.childCount == 0) {
+            binding.modelStrip.addView(
+                TextView(requireContext()).apply {
+                    layoutParams = LinearLayout.LayoutParams(260.dp, 90.dp)
+                    gravity = Gravity.CENTER
+                    text = "No models match this search"
+                    setTextColor(inactiveTextColor)
+                    textSize = 14f
+                }
+            )
+        }
+
+        binding.recentStrip.removeAllViews()
+        recentModelIndices.forEach { index ->
+            binding.recentStrip.addView(createModelStripItem(index, MODEL_CATALOG[index]))
+        }
+        val recentVisibility =
+            if (recentModelIndices.isEmpty()) View.GONE else View.VISIBLE
+        binding.recentModelsLabel.visibility = recentVisibility
+        binding.recentStripContainer.visibility = recentVisibility
+        updateModelSelectionStyles()
     }
 
     private fun createModelStripItem(index: Int, model: BiologyModel): View {
         val available = isModelAvailable(model.fileName)
         val item = LinearLayout(requireContext()).apply {
+            tag = index
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             alpha = if (available) 1f else 0.58f
             contentDescription =
                 if (available) model.title else "${model.title}, download required"
             setPadding(4.dp, 0, 4.dp, 0)
-            layoutParams = LinearLayout.LayoutParams(132.dp, ViewGroup.LayoutParams.MATCH_PARENT)
+            layoutParams = LinearLayout.LayoutParams(126.dp, ViewGroup.LayoutParams.MATCH_PARENT)
             setOnClickListener { selectModel(index) }
         }
 
-        val badge = TextView(requireContext()).apply {
-            width = 112.dp
-            height = 68.dp
-            gravity = Gravity.CENTER
-            text = model.badge
-            setTextColor(Color.WHITE)
-            textSize = 19f
-            typeface = Typeface.DEFAULT_BOLD
+        val preview = FrameLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(112.dp, 68.dp)
             background = requireContext().getDrawable(
                 if (index == selectedModelIndex) {
                     R.drawable.bg_thumbnail_selected
@@ -290,6 +447,31 @@ class FirstFragment : Fragment() {
                 }
             )
         }
+
+        val image = ImageView(requireContext()).apply {
+            tag = THUMBNAIL_IMAGE_TAG
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setPadding(3.dp, 3.dp, 3.dp, 3.dp)
+        }
+        val placeholder = TextView(requireContext()).apply {
+            tag = THUMBNAIL_PLACEHOLDER_TAG
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            gravity = Gravity.CENTER
+            text = model.badge
+            setTextColor(Color.WHITE)
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        preview.addView(image)
+        preview.addView(placeholder)
+        loadCachedThumbnail(index, image, placeholder)
 
         val label = TextView(requireContext()).apply {
             width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -301,8 +483,19 @@ class FirstFragment : Fragment() {
             textSize = 11f
         }
 
-        item.addView(badge)
+        val status = TextView(requireContext()).apply {
+            width = ViewGroup.LayoutParams.MATCH_PARENT
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            gravity = Gravity.CENTER
+            text = if (available) "READY" else "NEEDS FILE"
+            setTextColor(if (available) readyTextColor else inactiveTextColor)
+            textSize = 9f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        item.addView(preview)
         item.addView(label)
+        item.addView(status)
         return item
     }
 
@@ -343,27 +536,105 @@ class FirstFragment : Fragment() {
         selectedModelIndex = index
         val model = MODEL_CATALOG[index]
 
-        MODEL_CATALOG.forEachIndexed { childIndex, _ ->
-            val item = binding.modelStrip.getChildAt(childIndex) as? LinearLayout
-            val badge = item?.getChildAt(0) as? TextView
-            val label = item?.getChildAt(1) as? TextView
-            badge?.background = requireContext().getDrawable(
-                if (childIndex == selectedModelIndex) {
+        addRecentModel(index)
+        updateModelSelectionStyles()
+        configurePartList(model)
+        selectPart(0, updateViewer = false)
+        binding.fullScreenTitle.text = model.title
+        loadModel(model)
+    }
+
+    private fun addRecentModel(index: Int) {
+        recentModelIndices.remove(index)
+        recentModelIndices.add(0, index)
+        while (recentModelIndices.size > MAX_RECENT_MODELS) {
+            recentModelIndices.removeLast()
+        }
+        requireContext()
+            .getSharedPreferences(PREFERENCES_NAME, 0)
+            .edit()
+            .putString(PREFERENCE_RECENT_MODELS, recentModelIndices.joinToString(","))
+            .apply()
+
+        binding.recentStrip.removeAllViews()
+        recentModelIndices.forEach { recentIndex ->
+            binding.recentStrip.addView(
+                createModelStripItem(recentIndex, MODEL_CATALOG[recentIndex])
+            )
+        }
+        binding.recentModelsLabel.visibility = View.VISIBLE
+        binding.recentStripContainer.visibility = View.VISIBLE
+    }
+
+    private fun updateModelSelectionStyles() {
+        updateModelSelectionStyles(binding.modelStrip)
+        updateModelSelectionStyles(binding.recentStrip)
+    }
+
+    private fun updateModelSelectionStyles(strip: LinearLayout) {
+        repeat(strip.childCount) { childIndex ->
+            val item = strip.getChildAt(childIndex) as? LinearLayout ?: return@repeat
+            val modelIndex = item.tag as? Int ?: return@repeat
+            val preview = item.getChildAt(0) as? FrameLayout
+            val label = item.getChildAt(1) as? TextView
+            preview?.background = requireContext().getDrawable(
+                if (modelIndex == selectedModelIndex) {
                     R.drawable.bg_thumbnail_selected
                 } else {
                     R.drawable.bg_thumbnail
                 }
             )
             label?.setTextColor(
-                if (childIndex == selectedModelIndex) selectedTextColor else inactiveTextColor
+                if (modelIndex == selectedModelIndex) selectedTextColor else inactiveTextColor
             )
         }
-
-        configurePartList(model)
-        selectPart(0, updateViewer = false)
-        binding.fullScreenTitle.text = model.title
-        loadModel(model)
     }
+
+    private fun loadCachedThumbnail(
+        modelIndex: Int,
+        image: ImageView,
+        placeholder: TextView
+    ) {
+        val thumbnail = thumbnailFile(modelIndex)
+        if (!thumbnail.isFile || thumbnail.length() == 0L) return
+        val bitmap = BitmapFactory.decodeFile(thumbnail.absolutePath) ?: return
+        image.setImageBitmap(bitmap)
+        placeholder.visibility = View.GONE
+    }
+
+    private fun updateVisibleThumbnails(modelIndex: Int, imageBytes: ByteArray) {
+        val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size) ?: return
+        listOf(binding.modelStrip, binding.recentStrip).forEach { strip ->
+            repeat(strip.childCount) { childIndex ->
+                val item = strip.getChildAt(childIndex) as? LinearLayout ?: return@repeat
+                if (item.tag != modelIndex) return@repeat
+                val preview = item.getChildAt(0) as? FrameLayout ?: return@repeat
+                val image = preview.findViewWithTag<ImageView>(THUMBNAIL_IMAGE_TAG)
+                val placeholder =
+                    preview.findViewWithTag<TextView>(THUMBNAIL_PLACEHOLDER_TAG)
+                image?.setImageBitmap(bitmap)
+                placeholder?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun thumbnailFile(modelIndex: Int): File {
+        val directory = File(requireContext().cacheDir, THUMBNAIL_DIRECTORY).apply { mkdirs() }
+        return File(directory, "$modelIndex.png")
+    }
+
+    private fun modelCategory(model: BiologyModel): String =
+        when (model.fileName) {
+            "Bacteriacell.glb" -> FILTER_MICROBIOLOGY
+            "PlantCell.glb",
+            "Chloroplast.glb",
+            "plant cell wall.glb",
+            "Vacuole.glb" -> FILTER_PLANTS
+            "Neuron.glb",
+            "WhiteBloodCell.glb",
+            "epithelial microvilli.glb" -> FILTER_HUMAN
+            else -> FILTER_ORGANELLES
+        }
 
     private fun selectPart(index: Int, updateViewer: Boolean) {
         val model = MODEL_CATALOG[selectedModelIndex]
@@ -396,8 +667,10 @@ class FirstFragment : Fragment() {
         val storedModel = findStoredModel(model.fileName)
         val bundled = isBundledModelAvailable(model.fileName)
         val available = storedModel != null || bundled
-        binding.modelType.text =
-            if (available) "Interactive 3D anatomy" else "Model download required"
+        binding.modelAvailability.text = if (available) "READY" else "NEEDS FILE"
+        binding.modelAvailability.setTextColor(
+            if (available) readyTextColor else inactiveTextColor
+        )
 
         val partsJson = JSONArray().apply {
             model.parts.forEach { part ->
@@ -421,6 +694,9 @@ class FirstFragment : Fragment() {
         binding.modelProgress.visibility = if (available) View.VISIBLE else View.GONE
         isAutoRotating = true
         updateRotationControl()
+        binding.zoomLevel.text = "100%"
+        binding.orientationIndicator.text = "FRONT"
+        updateZoomControls(100)
         val query = buildString {
             append("file:///android_asset/model_viewer.html?")
             if (source != null) {
@@ -430,8 +706,20 @@ class FirstFragment : Fragment() {
             }
             append("&title=${Uri.encode(model.title)}")
             append("&parts=${Uri.encode(partsJson)}")
+            append("&modelIndex=$selectedModelIndex")
+            append("&rotationSpeed=${ROTATION_SPEEDS[rotationSpeedIndex]}")
         }
         binding.modelWebView.loadUrl(query)
+    }
+
+    private fun updateZoomControls(zoomPercent: Int) {
+        binding.zoomLevel.text = "$zoomPercent%"
+        val canZoomIn = zoomPercent < MAX_ZOOM_PERCENT
+        val canZoomOut = zoomPercent > MIN_ZOOM_PERCENT
+        binding.zoomInButton.isEnabled = canZoomIn
+        binding.zoomInButton.alpha = if (canZoomIn) 1f else 0.35f
+        binding.zoomOutButton.isEnabled = canZoomOut
+        binding.zoomOutButton.alpha = if (canZoomOut) 1f else 0.35f
     }
 
     private fun toggledVisibility(currentVisibility: Int): Int =
@@ -457,16 +745,62 @@ class FirstFragment : Fragment() {
                 if (_binding != null) selectPart(index, updateViewer = false)
             }
         }
+
+        @JavascriptInterface
+        fun onCameraState(zoomPercent: Int, orientation: String) {
+            activity?.runOnUiThread {
+                if (_binding == null) return@runOnUiThread
+                updateZoomControls(zoomPercent.coerceIn(MIN_ZOOM_PERCENT, MAX_ZOOM_PERCENT))
+                binding.orientationIndicator.text = orientation.uppercase()
+            }
+        }
+
+        @JavascriptInterface
+        fun onThumbnailReady(modelIndex: Int, encodedImage: String) {
+            if (modelIndex !in MODEL_CATALOG.indices || encodedImage.isBlank()) return
+            val imageBytes = runCatching {
+                Base64.decode(encodedImage, Base64.DEFAULT)
+            }.getOrNull() ?: return
+            if (imageBytes.isEmpty()) return
+
+            runCatching {
+                FileOutputStream(thumbnailFile(modelIndex)).use { output ->
+                    output.write(imageBytes)
+                }
+            }.onSuccess {
+                activity?.runOnUiThread {
+                    if (_binding != null) updateVisibleThumbnails(modelIndex, imageBytes)
+                }
+            }
+        }
     }
 
     private companion object {
         const val MODEL_ASSET_DIRECTORY = "biology/3d"
+        const val THUMBNAIL_DIRECTORY = "model-thumbnails"
         const val MODEL_HOST = "biology.local"
         const val GLB_MIME_TYPE = "model/gltf-binary"
         const val BRIDGE_NAME = "BiologyBridge"
+        const val PREFERENCES_NAME = "biology_explorer"
+        const val PREFERENCE_RECENT_MODELS = "recent_models"
+        const val MAX_RECENT_MODELS = 5
+        const val THUMBNAIL_IMAGE_TAG = "thumbnail_image"
+        const val THUMBNAIL_PLACEHOLDER_TAG = "thumbnail_placeholder"
+        const val FILTER_ALL = "All"
+        const val FILTER_ORGANELLES = "Organelles"
+        const val FILTER_PLANTS = "Plants"
+        const val FILTER_HUMAN = "Human"
+        const val FILTER_MICROBIOLOGY = "Microbiology"
+        const val MIN_ZOOM_PERCENT = 35
+        const val MAX_ZOOM_PERCENT = 300
 
         val selectedTextColor: Int = Color.parseColor("#AFA3FF")
         val inactiveTextColor: Int = Color.parseColor("#98A8C2")
+        val readyTextColor: Int = Color.parseColor("#73E8C5")
+        val FILTERS =
+            listOf(FILTER_ALL, FILTER_ORGANELLES, FILTER_PLANTS, FILTER_HUMAN, FILTER_MICROBIOLOGY)
+        val ROTATION_SPEEDS = listOf(10, 18, 30)
+        val ROTATION_SPEED_LABELS = listOf("0.5×", "1×", "1.5×")
 
         fun part(
             title: String,

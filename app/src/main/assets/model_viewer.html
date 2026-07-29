@@ -104,9 +104,13 @@
     const src = params.get("src");
     const title = params.get("title") || "Biology model";
     const missing = params.get("missing") === "1";
+    const modelIndex = Number(params.get("modelIndex") || "-1");
+    const rotationSpeed = Number(params.get("rotationSpeed") || "18");
     const viewer = document.getElementById("viewer");
     const message = document.getElementById("message");
     let parts = [];
+    let initialCameraRadius = 0;
+    let lastCameraUpdate = 0;
 
     try {
         parts = JSON.parse(params.get("parts") || "[]");
@@ -116,6 +120,7 @@
 
     if (src) {
         viewer.src = src;
+        viewer.setAttribute("rotation-per-second", `${rotationSpeed}deg`);
     } else if (missing) {
         viewer.style.display = "none";
         message.innerHTML = `<strong>${escapeHtml(title)}</strong><br>This model is listed but has not been downloaded to this device yet.`;
@@ -125,7 +130,17 @@
 
     viewer.addEventListener("load", () => {
         addHotspots();
+        initialCameraRadius = viewer.getCameraOrbit().radius;
+        reportCameraState();
+        captureThumbnail();
         message.style.display = "none";
+    });
+
+    viewer.addEventListener("camera-change", () => {
+        const now = Date.now();
+        if (now - lastCameraUpdate < 180) return;
+        lastCameraUpdate = now;
+        reportCameraState();
     });
 
     viewer.addEventListener("error", () => {
@@ -166,6 +181,10 @@
         viewer.autoRotate = Boolean(enabled);
     };
 
+    window.setRotationSpeed = function(degreesPerSecond) {
+        viewer.setAttribute("rotation-per-second", `${Number(degreesPerSecond)}deg`);
+    };
+
     window.rotateBy = function(degrees) {
         const orbit = viewer.getCameraOrbit();
         const nextTheta = orbit.theta + Number(degrees) * Math.PI / 180;
@@ -186,6 +205,34 @@
         viewer.fieldOfView = "auto";
         viewer.jumpCameraToGoal();
     };
+
+    function reportCameraState() {
+        if (!window.BiologyBridge) return;
+        const orbit = viewer.getCameraOrbit();
+        if (!initialCameraRadius) initialCameraRadius = orbit.radius;
+        const zoom = Math.max(35, Math.min(300, Math.round(initialCameraRadius / orbit.radius * 100)));
+        const degrees = ((orbit.theta * 180 / Math.PI) % 360 + 360) % 360;
+        let orientation = "Front";
+        if (degrees >= 45 && degrees < 135) orientation = "Right";
+        else if (degrees >= 135 && degrees < 225) orientation = "Back";
+        else if (degrees >= 225 && degrees < 315) orientation = "Left";
+        window.BiologyBridge.onCameraState(zoom, orientation);
+    }
+
+    async function captureThumbnail() {
+        if (!window.BiologyBridge || modelIndex < 0 || typeof viewer.toBlob !== "function") return;
+        try {
+            const blob = await viewer.toBlob({ idealAspect: true });
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const encoded = String(reader.result || "").split(",")[1] || "";
+                if (encoded) window.BiologyBridge.onThumbnailReady(modelIndex, encoded);
+            };
+            reader.readAsDataURL(blob);
+        } catch (_) {
+            // A text badge remains available if this WebView cannot capture WebGL.
+        }
+    }
 
     function escapeHtml(value) {
         const node = document.createElement("div");
