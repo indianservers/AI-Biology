@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-val requiredBiologyModels = listOf(
+val biologyModelCatalog = listOf(
     "Bacteriacell.glb",
     "Cell Membrane.glb",
     "Chloroplast.glb",
@@ -18,8 +18,15 @@ val requiredBiologyModels = listOf(
     "Vacuole.glb",
     "WhiteBloodCell.glb"
 )
+val bundledBiologyModels = setOf(
+    "Bacteriacell.glb",
+    "Neuron.glb",
+    "Vacuole.glb"
+)
 val omitBundledModels =
     providers.gradleProperty("omitBundledModels").map(String::toBoolean).getOrElse(false)
+val modelsExcludedFromApk =
+    if (omitBundledModels) biologyModelCatalog else biologyModelCatalog - bundledBiologyModels
 
 android {
     namespace = "com.indianservers.biology"
@@ -57,9 +64,8 @@ android {
     }
     androidResources {
         noCompress += "glb"
-        if (omitBundledModels) {
-            ignoreAssetsPattern = "*.glb"
-        }
+        ignoreAssetsPattern =
+            if (omitBundledModels) "*.glb" else modelsExcludedFromApk.joinToString(":")
     }
 }
 
@@ -81,7 +87,7 @@ val verifyBundledBiologyModels by tasks.registering {
 
     doLast {
         if (omitBundledModels) return@doLast
-        val missingModels = requiredBiologyModels.filter { modelName ->
+        val missingModels = bundledBiologyModels.filter { modelName ->
             val modelFile = modelDirectory.file(modelName).asFile
             !modelFile.isFile || modelFile.length() == 0L
         }
