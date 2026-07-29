@@ -47,16 +47,15 @@
             width: 22px;
             height: 22px;
             padding: 0;
-            border: 2px solid #fff;
+            border: 2px solid rgba(255, 255, 255, 0.58);
             border-radius: 50%;
-            background: #7c4dff;
-            box-shadow: 0 0 0 6px rgba(124, 77, 255, 0.24), 0 0 18px #8d68ff;
-            opacity: 0.48;
+            background: rgba(124, 77, 255, 0.48);
+            box-shadow: 0 0 0 6px rgba(124, 77, 255, 0.14);
+            opacity: 1;
             transition: opacity 140ms ease, background 140ms ease, box-shadow 140ms ease;
         }
 
-        .hotspot::after {
-            content: attr(data-label);
+        .hotspot-label {
             position: absolute;
             left: 18px;
             top: calc(-13px + var(--label-shift, 0px));
@@ -72,39 +71,26 @@
             font-weight: 700;
             line-height: 1.2;
             pointer-events: none;
+            transform: translateX(var(--label-x-shift, 0px));
+            z-index: 2;
         }
 
-        .hotspot::before {
-            content: "";
-            position: absolute;
-            left: 16px;
-            top: 10px;
-            display: none;
-            width: 26px;
-            border-top: 1px solid #936cff;
-            pointer-events: none;
-        }
-
-        .hotspot.label-left::after {
+        .hotspot.label-left .hotspot-label {
             right: 18px;
             left: auto;
         }
 
-        .hotspot.label-left::before {
-            right: 16px;
-            left: auto;
-        }
-
         .hotspot.selected {
+            border-color: #fff;
             background: #55e7d0;
             box-shadow: 0 0 0 6px rgba(85, 231, 208, 0.22), 0 0 20px #55e7d0;
             opacity: 1;
         }
 
-        .hotspot.selected::after,
-        .hotspot.selected::before,
-        body.show-all-labels .hotspot[data-visible]::after,
-        body.show-all-labels .hotspot[data-visible]::before { display: block; }
+        .hotspot.selected .hotspot-label,
+        body.show-all-labels:not(.identify-mode) .hotspot[data-visible] .hotspot-label {
+            display: block;
+        }
 
         .hotspot:not([data-visible]) {
             opacity: 0;
@@ -112,6 +98,26 @@
         }
 
         .hotspot[hidden] { display: none; }
+
+        #leader-lines {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        #leader-lines line {
+            stroke: #936cff;
+            stroke-width: 1.5;
+            vector-effect: non-scaling-stroke;
+        }
+
+        #leader-lines line.selected {
+            stroke: #55e7d0;
+            stroke-width: 2;
+        }
     </style>
 </head>
 <body>
@@ -123,6 +129,7 @@
     rotation-per-second="18deg"
     interaction-prompt="auto"
     interaction-prompt-threshold="1200"
+    interpolation-decay="80"
     disable-tap
     exposure="1"
     shadow-intensity="0.7"
@@ -130,6 +137,7 @@
     min-camera-orbit="auto 5deg 12%"
     max-camera-orbit="auto 175deg 500%">
 </model-viewer>
+<svg id="leader-lines" aria-hidden="true"></svg>
 <div id="message" class="message">Loading 3D model...</div>
 
 <script>
@@ -142,12 +150,14 @@
     let identifyMode = params.get("identifyMode") !== "0";
     let showAllLabels = params.get("showAllLabels") === "1";
     const viewer = document.getElementById("viewer");
+    const leaderLines = document.getElementById("leader-lines");
     const message = document.getElementById("message");
     let parts = [];
     let initialCameraRadius = 0;
     let lastCameraUpdate = 0;
     let pointerStart = null;
     let lastTapAt = 0;
+    let selectedPartIndex = -1;
 
     try {
         parts = JSON.parse(params.get("parts") || "[]");
@@ -170,11 +180,15 @@
     viewer.addEventListener("load", () => {
         addHotspots();
         document.body.classList.toggle("show-all-labels", showAllLabels);
+        document.body.classList.toggle("identify-mode", identifyMode);
         initialCameraRadius = viewer.getCameraOrbit().radius;
         reportCameraState();
         captureThumbnail();
         message.style.display = "none";
         notifyModelState("loaded", "");
+        requestAnimationFrame(() => {
+            requestAnimationFrame(resolveSurfaceAnchors);
+        });
     });
 
     viewer.addEventListener("camera-change", () => {
@@ -197,11 +211,19 @@
             hotspot.type = "button";
             hotspot.className = "hotspot";
             hotspot.slot = `hotspot-${index}`;
-            hotspot.dataset.position = part.position;
-            hotspot.dataset.normal = part.normal || "0 0 1";
+            if (part.surface) {
+                hotspot.dataset.surface = part.surface;
+            } else {
+                hotspot.dataset.position = part.position;
+                hotspot.dataset.normal = part.normal || "0 0 1";
+            }
             hotspot.dataset.label = part.title;
             hotspot.dataset.visibilityAttribute = "visible";
             hotspot.setAttribute("aria-label", `Identify ${part.title}`);
+            const label = document.createElement("span");
+            label.className = "hotspot-label";
+            label.textContent = part.title;
+            hotspot.appendChild(label);
             hotspot.addEventListener("click", event => {
                 event.stopPropagation();
                 focusPart(index);
@@ -209,33 +231,98 @@
                     window.BiologyBridge.onPartSelected(index);
                 }
             });
+            hotspot.addEventListener("hotspot-visibility", layoutHotspotLabels);
             viewer.appendChild(hotspot);
         });
 
-        if (parts.length && !identifyMode) selectPart(0);
+        if (parts.length && !identifyMode) applyPartSelection(0);
     }
 
-    window.selectPart = function(index) {
-        selectPart(index);
-    };
+    window.selectPart = applyPartSelection;
 
-    function selectPart(index) {
+    function applyPartSelection(index) {
+        selectedPartIndex = Number(index);
         viewer.querySelectorAll(".hotspot").forEach((hotspot, itemIndex) => {
-            hotspot.classList.toggle("selected", itemIndex === Number(index));
+            hotspot.classList.toggle("selected", itemIndex === selectedPartIndex);
         });
         layoutHotspotLabels();
+    }
+
+    async function resolveSurfaceAnchors() {
+        if (typeof viewer.surfaceFromPoint !== "function") return;
+        const hotspots = [...viewer.querySelectorAll(".hotspot")];
+        let changed = false;
+
+        for (const [index, hotspot] of hotspots.entries()) {
+            let data = viewer.queryHotspot(hotspot.slot);
+            if (
+                hotspot.dataset.surface &&
+                data &&
+                Number.isFinite(data.canvasPosition.x) &&
+                Number.isFinite(data.canvasPosition.y)
+            ) {
+                continue;
+            }
+            if (hotspot.dataset.surface) {
+                delete hotspot.dataset.surface;
+                hotspot.dataset.position = parts[index].position;
+                hotspot.dataset.normal = parts[index].normal || "0 0 1";
+                viewer.updateHotspot({
+                    name: hotspot.slot,
+                    position: hotspot.dataset.position,
+                    normal: hotspot.dataset.normal
+                });
+                data = viewer.queryHotspot(hotspot.slot);
+            }
+            if (!data) continue;
+            const surface = findSurfaceNear(
+                data.canvasPosition.x,
+                data.canvasPosition.y
+            );
+            if (!surface) continue;
+
+            hotspot.dataset.surface = surface;
+            viewer.updateHotspot({ name: hotspot.slot, surface });
+            changed = true;
+        }
+
+        if (changed && window.BiologyBridge && modelIndex >= 0) {
+            const anchors = hotspots.map(hotspot => hotspot.dataset.surface || "");
+            window.BiologyBridge.onSurfaceAnchorsReady(modelIndex, JSON.stringify(anchors));
+        }
+        layoutHotspotLabels();
+    }
+
+    function findSurfaceNear(x, y) {
+        const offsets = [
+            [0, 0],
+            [-12, 0], [12, 0], [0, -12], [0, 12],
+            [-24, -24], [24, -24], [-24, 24], [24, 24],
+            [-36, 0], [36, 0], [0, -36], [0, 36],
+            [-52, -26], [52, -26], [-52, 26], [52, 26]
+        ];
+        for (const [offsetX, offsetY] of offsets) {
+            const sampleX = Math.max(1, Math.min(viewer.clientWidth - 1, x + offsetX));
+            const sampleY = Math.max(1, Math.min(viewer.clientHeight - 1, y + offsetY));
+            const surface = viewer.surfaceFromPoint(sampleX, sampleY);
+            if (surface) return surface;
+        }
+        return null;
     }
 
     window.focusPart = focusPart;
 
     function focusPart(index) {
-        selectPart(index);
-        const part = parts[Number(index)];
-        if (!part) return;
+        applyPartSelection(index);
+        const hotspot = viewer.queryHotspot(`hotspot-${Number(index)}`);
+        if (!hotspot) return;
         const orbit = viewer.getCameraOrbit();
-        viewer.cameraTarget = part.position;
-        viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${Math.max(0.05, orbit.radius * 0.78)}m`;
-        viewer.jumpCameraToGoal();
+        const theta = hotspot.facingCamera ? orbit.theta : orbit.theta + Math.PI;
+        const phi = orbit.phi;
+        viewer.cameraTarget = hotspot.position.toString();
+        viewer.cameraOrbit =
+            `${theta}rad ${phi}rad ${Math.max(0.05, orbit.radius * 0.78)}m`;
+        viewer.autoRotate = false;
     }
 
     window.setShowAllLabels = function(enabled) {
@@ -246,9 +333,28 @@
 
     window.setIdentifyMode = function(enabled) {
         identifyMode = Boolean(enabled);
+        document.body.classList.toggle("identify-mode", identifyMode);
         if (identifyMode) {
+            selectedPartIndex = -1;
             viewer.querySelectorAll(".hotspot").forEach(hotspot => hotspot.classList.remove("selected"));
         }
+        layoutHotspotLabels();
+    };
+
+    window.refreshHotspots = function() {
+        viewer.querySelectorAll(".hotspot").forEach(hotspot => {
+            const update = { name: hotspot.slot };
+            if (hotspot.dataset.surface) {
+                update.surface = hotspot.dataset.surface;
+            } else {
+                update.position = hotspot.dataset.position;
+                update.normal = hotspot.dataset.normal;
+            }
+            viewer.updateHotspot(update);
+        });
+        requestAnimationFrame(() => {
+            requestAnimationFrame(layoutHotspotLabels);
+        });
     };
 
     window.setAutoRotation = function(enabled) {
@@ -307,21 +413,113 @@
     }
 
     function layoutHotspotLabels() {
-        const visibleHotspots = [...viewer.querySelectorAll(".hotspot[data-visible]")];
-        const positioned = visibleHotspots.map(hotspot => {
-            const data = viewer.queryHotspot(hotspot.slot);
-            if (!data) return null;
-            return { hotspot, x: data.canvasPosition.x, y: data.canvasPosition.y };
-        }).filter(Boolean).sort((a, b) => a.y - b.y);
+        const labeledHotspots = [...viewer.querySelectorAll(".hotspot[data-visible]")]
+            .filter(hotspot =>
+                hotspot.classList.contains("selected") ||
+                (showAllLabels && !identifyMode)
+            );
+        viewer.querySelectorAll(".hotspot").forEach(hotspot => {
+            hotspot.style.removeProperty("--label-shift");
+            hotspot.style.removeProperty("--label-x-shift");
+        });
 
-        let previousLabelY = -Infinity;
+        const positioned = labeledHotspots.map(hotspot => {
+            const data = viewer.queryHotspot(hotspot.slot);
+            const label = hotspot.querySelector(".hotspot-label");
+            if (!data || !data.facingCamera || !label) return null;
+            return {
+                hotspot,
+                label,
+                x: data.canvasPosition.x,
+                y: data.canvasPosition.y
+            };
+        }).filter(Boolean);
+
         positioned.forEach(item => {
-            const desiredY = Math.max(item.y, previousLabelY + 38);
-            item.hotspot.style.setProperty("--label-shift", `${desiredY - item.y}px`);
-            item.hotspot.classList.toggle("label-left", item.x > viewer.clientWidth * 0.62);
-            previousLabelY = desiredY;
+            item.hotspot.classList.toggle("label-left", item.x > viewer.clientWidth * 0.5);
+        });
+
+        resolveLabelCollisions(positioned);
+        clampLabelsHorizontally(positioned);
+        requestAnimationFrame(() => drawLeaderLines(positioned));
+    }
+
+    function clampLabelsHorizontally(items) {
+        const viewerBounds = viewer.getBoundingClientRect();
+        const safeLeft = viewerBounds.left + 8;
+        const safeRight = viewerBounds.right - 76;
+        items.forEach(item => {
+            const bounds = item.label.getBoundingClientRect();
+            let shift = 0;
+            if (bounds.left < safeLeft) {
+                shift = safeLeft - bounds.left;
+            } else if (bounds.right > safeRight) {
+                shift = safeRight - bounds.right;
+            }
+            item.hotspot.style.setProperty("--label-x-shift", `${shift}px`);
         });
     }
+
+    function resolveLabelCollisions(items) {
+        const gap = 8;
+        const edge = 8;
+        const ordered = items.sort((a, b) => a.y - b.y);
+        let previousBottom = edge;
+
+        ordered.forEach(item => {
+            const height = Math.max(32, item.label.getBoundingClientRect().height);
+            const naturalTop = item.y - height / 2;
+            const top = Math.max(edge, naturalTop, previousBottom + gap);
+            item.labelTop = top;
+            item.labelHeight = height;
+            previousBottom = top + height;
+        });
+
+        let nextTop = viewer.clientHeight - edge;
+        [...ordered].reverse().forEach(item => {
+            const maximumTop = nextTop - item.labelHeight - gap;
+            item.labelTop = Math.min(item.labelTop, maximumTop);
+            item.labelTop = Math.max(edge, item.labelTop);
+            nextTop = item.labelTop;
+        });
+
+        ordered.forEach(item => {
+            const naturalTop = item.y - 13;
+            item.hotspot.style.setProperty(
+                "--label-shift",
+                `${item.labelTop - naturalTop}px`
+            );
+        });
+    }
+
+    function drawLeaderLines(items) {
+        leaderLines.replaceChildren();
+        const viewerBounds = viewer.getBoundingClientRect();
+        items.forEach(item => {
+            if (!item.hotspot.matches("[data-visible]")) return;
+            const labelBounds = item.label.getBoundingClientRect();
+            if (!labelBounds.width || !labelBounds.height) return;
+
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            const labelOnLeft = item.hotspot.classList.contains("label-left");
+            line.setAttribute("x1", item.x);
+            line.setAttribute("y1", item.y);
+            line.setAttribute(
+                "x2",
+                (labelOnLeft ? labelBounds.right : labelBounds.left) - viewerBounds.left
+            );
+            line.setAttribute(
+                "y2",
+                labelBounds.top - viewerBounds.top + labelBounds.height / 2
+            );
+            if (item.hotspot.classList.contains("selected")) {
+                line.classList.add("selected");
+            }
+            leaderLines.appendChild(line);
+        });
+    }
+
+    window.addEventListener("resize", layoutHotspotLabels);
 
     viewer.addEventListener("pointerdown", event => {
         pointerStart = { x: event.clientX, y: event.clientY, at: Date.now() };

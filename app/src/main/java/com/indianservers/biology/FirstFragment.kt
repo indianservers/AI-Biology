@@ -102,6 +102,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
+        restoreIdentificationSettings()
         configureInsets()
         setSystemBarsVisible(true)
         configureViewer()
@@ -158,6 +159,10 @@ class FirstFragment : Fragment() {
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     private fun configureViewer() {
+        WebView.setWebContentsDebuggingEnabled(
+            requireContext().applicationInfo.flags and
+                android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+        )
         binding.modelWebView.apply {
             setBackgroundColor(Color.TRANSPARENT)
             addJavascriptInterface(ModelBridge(), BRIDGE_NAME)
@@ -489,6 +494,9 @@ class FirstFragment : Fragment() {
 
         if (isExplore) {
             updateExploreAvailability()
+            binding.modelWebView.post {
+                if (_binding != null) runViewerCommand("refreshHotspots()")
+            }
         } else {
             renderActiveWorkflow()
         }
@@ -1500,9 +1508,14 @@ class FirstFragment : Fragment() {
             setTextColor(Color.WHITE)
             textSize = 14f
             isChecked = showAllLabels
+            isEnabled = !identifyMode
+            alpha = if (identifyMode) 0.45f else 1f
             setPadding(0, 14.dp, 0, 4.dp)
             setOnCheckedChangeListener { _, enabled ->
                 showAllLabels = enabled
+                preferences().edit()
+                    .putBoolean(PREFERENCE_SHOW_ALL_LABELS, enabled)
+                    .apply()
                 runViewerCommand("setShowAllLabels($enabled)")
             }
         }
@@ -1514,7 +1527,15 @@ class FirstFragment : Fragment() {
             setPadding(0, 4.dp, 0, 10.dp)
             setOnCheckedChangeListener { _, enabled ->
                 identifyMode = enabled
+                preferences().edit()
+                    .putBoolean(PREFERENCE_IDENTIFY_MODE, enabled)
+                    .apply()
+                showAllSwitch.isEnabled = !enabled
+                showAllSwitch.alpha = if (enabled) 0.45f else 1f
                 runViewerCommand("setIdentifyMode($enabled)")
+                if (!enabled) {
+                    runViewerCommand("selectPart($selectedPartIndex)")
+                }
             }
         }
         content.addView(showAllSwitch)
@@ -1575,6 +1596,11 @@ class FirstFragment : Fragment() {
         dialog.show()
     }
 
+    private fun restoreIdentificationSettings() {
+        identifyMode = preferences().getBoolean(PREFERENCE_IDENTIFY_MODE, true)
+        showAllLabels = preferences().getBoolean(PREFERENCE_SHOW_ALL_LABELS, false)
+    }
+
     private fun createSheetAction(
         title: String,
         enabled: Boolean,
@@ -1607,13 +1633,19 @@ class FirstFragment : Fragment() {
             if (available) readyTextColor else inactiveTextColor
         )
 
+        val savedSurfaceAnchors = savedSurfaceAnchors(selectedModelIndex, model.parts.size)
         val partsJson = JSONArray().apply {
-            model.parts.forEach { part ->
+            model.parts.forEachIndexed { index, part ->
                 put(
                     JSONObject()
                         .put("title", part.title)
                         .put("position", part.position)
                         .put("normal", part.normal)
+                        .apply {
+                            savedSurfaceAnchors.getOrNull(index)
+                                ?.takeIf(String::isNotBlank)
+                                ?.let { surface -> put("surface", surface) }
+                        }
                 )
             }
         }.toString()
@@ -1685,6 +1717,18 @@ class FirstFragment : Fragment() {
             .list(MODEL_ASSET_DIRECTORY)
             ?.contains(fileName) == true
 
+    private fun savedSurfaceAnchors(modelIndex: Int, expectedCount: Int): List<String> {
+        val encoded = preferences().getString(surfaceAnchorsKey(modelIndex), null)
+            ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(encoded)
+            if (array.length() != expectedCount) return emptyList()
+            List(array.length()) { index -> array.optString(index, "") }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun surfaceAnchorsKey(modelIndex: Int) = "surface_anchors_$modelIndex"
+
     private inner class ModelBridge {
         @JavascriptInterface
         fun onPartSelected(index: Int) {
@@ -1743,6 +1787,21 @@ class FirstFragment : Fragment() {
                 }
             }
         }
+
+        @JavascriptInterface
+        fun onSurfaceAnchorsReady(modelIndex: Int, encodedAnchors: String) {
+            if (modelIndex !in MODEL_CATALOG.indices || encodedAnchors.isBlank()) return
+            val expectedCount = MODEL_CATALOG[modelIndex].parts.size
+            val valid = runCatching {
+                val anchors = JSONArray(encodedAnchors)
+                anchors.length() == expectedCount &&
+                    (0 until anchors.length()).any { anchors.optString(it).isNotBlank() }
+            }.getOrDefault(false)
+            if (!valid) return
+            preferences().edit()
+                .putString(surfaceAnchorsKey(modelIndex), encodedAnchors)
+                .apply()
+        }
     }
 
     private companion object {
@@ -1756,6 +1815,8 @@ class FirstFragment : Fragment() {
         const val PREFERENCE_FULL_SCREEN_HINT_SHOWN = "full_screen_hint_shown"
         const val PREFERENCE_BOOKMARKS = "bookmarked_parts"
         const val PREFERENCE_TOTAL_XP = "total_xp"
+        const val PREFERENCE_IDENTIFY_MODE = "identify_mode"
+        const val PREFERENCE_SHOW_ALL_LABELS = "show_all_labels"
         const val MAX_RECENT_MODELS = 5
         const val MAX_QUIZ_QUESTIONS = 5
         const val FULL_SCREEN_CONTROLS_TIMEOUT_MS = 3_000L
