@@ -118,6 +118,33 @@
             stroke: #55e7d0;
             stroke-width: 2;
         }
+
+        body.high-contrast,
+        body.high-contrast model-viewer {
+            background: #000;
+        }
+
+        body.high-contrast .hotspot {
+            border-color: #fff;
+            background: #ffdf00;
+            box-shadow: 0 0 0 5px #000, 0 0 0 8px #fff;
+        }
+
+        body.high-contrast .hotspot-label {
+            border: 2px solid #ffdf00;
+            background: #000;
+            color: #fff;
+        }
+
+        body.large-labels .hotspot-label {
+            max-width: 220px;
+            padding: 10px 13px;
+            font-size: 17px;
+        }
+
+        body.reduced-motion .hotspot {
+            transition: none;
+        }
     </style>
 </head>
 <body>
@@ -138,7 +165,7 @@
     max-camera-orbit="auto 175deg 500%">
 </model-viewer>
 <svg id="leader-lines" aria-hidden="true"></svg>
-<div id="message" class="message">Loading 3D model...</div>
+<div id="message" class="message" role="status" aria-live="polite">Loading 3D model...</div>
 
 <script>
     const params = new URLSearchParams(window.location.search);
@@ -149,6 +176,10 @@
     const rotationSpeed = Number(params.get("rotationSpeed") || "18");
     let identifyMode = params.get("identifyMode") !== "0";
     let showAllLabels = params.get("showAllLabels") === "1";
+    let reducedMotion = params.get("reducedMotion") === "1";
+    let highContrast = params.get("highContrast") === "1";
+    let largerLabels = params.get("largerLabels") === "1";
+    let screenReaderMode = params.get("screenReader") === "1";
     const viewer = document.getElementById("viewer");
     const leaderLines = document.getElementById("leader-lines");
     const message = document.getElementById("message");
@@ -158,6 +189,8 @@
     let pointerStart = null;
     let lastTapAt = 0;
     let selectedPartIndex = -1;
+
+    applyAccessibilityClasses();
 
     try {
         parts = JSON.parse(params.get("parts") || "[]");
@@ -181,6 +214,7 @@
         addHotspots();
         document.body.classList.toggle("show-all-labels", showAllLabels);
         document.body.classList.toggle("identify-mode", identifyMode);
+        viewer.autoRotate = !reducedMotion && !screenReaderMode;
         initialCameraRadius = viewer.getCameraOrbit().radius;
         reportCameraState();
         captureThumbnail();
@@ -322,6 +356,7 @@
         viewer.cameraTarget = hotspot.position.toString();
         viewer.cameraOrbit =
             `${theta}rad ${phi}rad ${Math.max(0.05, orbit.radius * 0.78)}m`;
+        if (reducedMotion) viewer.jumpCameraToGoal();
         viewer.autoRotate = false;
     }
 
@@ -358,8 +393,31 @@
     };
 
     window.setAutoRotation = function(enabled) {
-        viewer.autoRotate = Boolean(enabled);
+        viewer.autoRotate = Boolean(enabled) && !reducedMotion && !screenReaderMode;
     };
+
+    window.setAccessibility = function(
+        useReducedMotion,
+        useHighContrast,
+        useLargerLabels,
+        useScreenReader
+    ) {
+        reducedMotion = Boolean(useReducedMotion);
+        highContrast = Boolean(useHighContrast);
+        largerLabels = Boolean(useLargerLabels);
+        screenReaderMode = Boolean(useScreenReader);
+        applyAccessibilityClasses();
+        if (reducedMotion || screenReaderMode) viewer.autoRotate = false;
+        layoutHotspotLabels();
+    };
+
+    function applyAccessibilityClasses() {
+        document.body.classList.toggle("reduced-motion", reducedMotion);
+        document.body.classList.toggle("high-contrast", highContrast);
+        document.body.classList.toggle("large-labels", largerLabels);
+        document.body.classList.toggle("screen-reader-mode", screenReaderMode);
+        viewer.interpolationDecay = reducedMotion ? 0 : 80;
+    }
 
     window.setRotationSpeed = function(degreesPerSecond) {
         viewer.setAttribute("rotation-per-second", `${Number(degreesPerSecond)}deg`);

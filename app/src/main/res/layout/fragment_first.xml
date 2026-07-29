@@ -56,6 +56,23 @@
             android:textSize="11sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/accessibilityButton"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/accessibilityButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Accessibility settings"
+            android:gravity="center"
+            android:text="Aa"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:tooltipText="Accessibility settings"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
@@ -518,6 +535,156 @@
                         android:gravity="center_vertical"
                         android:orientation="horizontal" />
                 </HorizontalScrollView>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/modelOverviewHeader"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_surface_panel"
+                android:drawableEnd="@drawable/ic_chevron_up"
+                android:gravity="center_vertical"
+                android:paddingStart="14dp"
+                android:paddingEnd="12dp"
+                android:text="Model briefing"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/modelOverviewPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_surface_panel"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/commonNameText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFF"
+                    android:textSize="21sp"
+                    android:textStyle="bold"
+                    tools:text="Bacterial cell" />
+
+                <TextView
+                    android:id="@+id/scientificNameText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:textColor="#73E8C5"
+                    android:textSize="13sp"
+                    android:textStyle="italic"
+                    tools:text="Prokaryotic cell" />
+
+                <LinearLayout
+                    android:id="@+id/readingLevelTabs"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/beginnerLevel"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="Beginner"
+                        android:textColor="#98A8C2"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/studentLevel"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="5dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="Student"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/advancedLevel"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="5dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="Advanced"
+                        android:textColor="#98A8C2"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/overviewDescription"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:lineSpacingExtra="4dp"
+                    android:textColor="#C7D4E7"
+                    android:textSize="15sp"
+                    tools:text="A bacterial cell is a compact prokaryotic system." />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/pronounceModelButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_filter_chip"
+                        android:contentDescription="Hear pronunciation"
+                        android:gravity="center"
+                        android:text="Listen"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/bookmarkModelButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="7dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_filter_chip"
+                        android:gravity="center"
+                        android:text="Bookmark"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/compareModelButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="7dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_filter_chip_selected"
+                        android:gravity="center"
+                        android:text="Compare"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/sourceAttribution"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textColor="#8EA2BF"
+                    android:textSize="11sp"
+                    tools:text="Source: OpenStax Biology 2e - Reviewed 29 Jul 2026" />
             </LinearLayout>
 
             <TextView

@@ -9,6 +9,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.content.pm.ActivityInfo
 import android.util.Base64
 import android.view.Gravity
@@ -48,6 +53,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -65,7 +71,13 @@ class FirstFragment : Fragment() {
     private var identifyMode = true
     private var currentMode = ExplorerMode.EXPLORE
     private var modelDiscoveryExpanded = true
+    private var modelOverviewExpanded = true
     private var partsExpanded = true
+    private var readingLevel = ReadingLevel.STUDENT
+    private var reducedMotion = false
+    private var highContrast = false
+    private var largerLabels = false
+    private var screenReaderMode = false
     private var quizModelIndex = -1
     private var quizQuestionIndex = 0
     private var quizScore = 0
@@ -73,12 +85,20 @@ class FirstFragment : Fragment() {
     private var quizQuestions = emptyList<QuizQuestion>()
     private val quizAwardedQuestions = mutableSetOf<Int>()
     private val bookmarkedParts = mutableSetOf<String>()
+    private val bookmarkedModels = mutableSetOf<Int>()
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideFullScreenControls = Runnable { setFullScreenControlsVisible(false) }
     private val hideFullScreenHint = Runnable {
-        _binding?.fullScreenHint?.animate()?.alpha(0f)?.withEndAction {
-            _binding?.fullScreenHint?.visibility = View.GONE
-        }?.start()
+        _binding?.fullScreenHint?.let { hint ->
+            if (reducedMotion) {
+                hint.alpha = 0f
+                hint.visibility = View.GONE
+            } else {
+                hint.animate().alpha(0f).withEndAction {
+                    hint.visibility = View.GONE
+                }.start()
+            }
+        }
     }
     private var partBottomSheet: BottomSheetDialog? = null
     private var activeFilter = FILTER_ALL
@@ -87,6 +107,9 @@ class FirstFragment : Fragment() {
     private var originalViewerParent: ViewGroup? = null
     private var originalViewerIndex = -1
     private var originalViewerLayoutParams: ViewGroup.LayoutParams? = null
+    private var tabletTwoPaneContainer: LinearLayout? = null
+    private var tabletPartsColumn: LinearLayout? = null
+    private var textToSpeech: TextToSpeech? = null
     private lateinit var modelStorageDirectory: File
 
     override fun onCreateView(
@@ -103,14 +126,19 @@ class FirstFragment : Fragment() {
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
         restoreIdentificationSettings()
+        restoreBiologyExperienceSettings()
+        restoreBookmarks()
+        configureTextToSpeech()
         configureInsets()
         setSystemBarsVisible(true)
         configureViewer()
         configureViewerControls()
         configureExpanders()
+        configureBiologyExperience()
+        configureAccessibility()
+        configureTabletTwoPane()
         configureModelDiscovery()
         configureLearningModes()
-        restoreBookmarks()
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(false) {
@@ -150,6 +178,9 @@ class FirstFragment : Fragment() {
         uiHandler.removeCallbacksAndMessages(null)
         partBottomSheet?.dismiss()
         partBottomSheet = null
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
         if (isFullScreen) exitFullScreen()
         binding.modelWebView.removeJavascriptInterface(BRIDGE_NAME)
         binding.modelWebView.destroy()
@@ -388,6 +419,11 @@ class FirstFragment : Fragment() {
         )
         controls.forEach { control ->
             control.animate().cancel()
+            if (reducedMotion) {
+                control.alpha = if (visible) 1f else 0f
+                control.visibility = if (visible) View.VISIBLE else View.GONE
+                return@forEach
+            }
             if (visible) {
                 control.visibility = View.VISIBLE
                 control.animate().alpha(1f).setDuration(140L).start()
@@ -449,6 +485,18 @@ class FirstFragment : Fragment() {
             binding.modelSelectorHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
         }
 
+        binding.modelOverviewHeader.setOnClickListener {
+            modelOverviewExpanded = !modelOverviewExpanded
+            binding.modelOverviewPanel.visibility =
+                if (modelOverviewExpanded) View.VISIBLE else View.GONE
+            binding.modelOverviewHeader.setCompoundDrawablesWithIntrinsicBounds(
+                0,
+                0,
+                if (modelOverviewExpanded) R.drawable.ic_chevron_up else R.drawable.ic_chevron_down,
+                0
+            )
+        }
+
         binding.partsHeader.setOnClickListener {
             partsExpanded = !partsExpanded
             val nextVisibility = if (partsExpanded) View.VISIBLE else View.GONE
@@ -462,6 +510,327 @@ class FirstFragment : Fragment() {
                 }
             binding.partsHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
         }
+    }
+
+    private fun configureTextToSpeech() {
+        textToSpeech = TextToSpeech(requireContext()) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                textToSpeech?.language = Locale.US
+                textToSpeech?.setSpeechRate(0.82f)
+            }
+        }
+    }
+
+    private fun configureBiologyExperience() {
+        val levels = listOf(
+            binding.beginnerLevel to ReadingLevel.BEGINNER,
+            binding.studentLevel to ReadingLevel.STUDENT,
+            binding.advancedLevel to ReadingLevel.ADVANCED
+        )
+        levels.forEach { (view, level) ->
+            view.setOnClickListener {
+                readingLevel = level
+                preferences().edit().putString(PREFERENCE_READING_LEVEL, level.name).apply()
+                updateReadingLevelTabs()
+                updateModelBriefing()
+                selectPart(selectedPartIndex, updateViewer = false)
+                if (currentMode != ExplorerMode.EXPLORE) renderActiveWorkflow()
+            }
+        }
+        binding.pronounceModelButton.setOnClickListener {
+            speakTerm(modelMetadata(MODEL_CATALOG[selectedModelIndex]).pronunciation)
+        }
+        binding.bookmarkModelButton.setOnClickListener {
+            toggleModelBookmark(selectedModelIndex)
+        }
+        binding.compareModelButton.setOnClickListener { showComparisonSelector() }
+        binding.sourceAttribution.setOnClickListener {
+            val metadata = modelMetadata(MODEL_CATALOG[selectedModelIndex])
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(metadata.sourceUrl)))
+        }
+        updateReadingLevelTabs()
+    }
+
+    private fun updateReadingLevelTabs() {
+        listOf(
+            binding.beginnerLevel to ReadingLevel.BEGINNER,
+            binding.studentLevel to ReadingLevel.STUDENT,
+            binding.advancedLevel to ReadingLevel.ADVANCED
+        ).forEach { (view, level) ->
+            val selected = readingLevel == level
+            view.background = requireContext().getDrawable(
+                if (selected) R.drawable.bg_filter_chip_selected else R.drawable.bg_filter_chip
+            )
+            view.setTextColor(if (selected) Color.WHITE else inactiveTextColor)
+            view.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+    }
+
+    private fun updateModelBriefing() {
+        if (_binding == null) return
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val metadata = modelMetadata(model)
+        binding.commonNameText.text = metadata.commonName
+        binding.scientificNameText.text = metadata.scientificName
+        setGlossaryText(binding.overviewDescription, overviewForLevel(model))
+        binding.bookmarkModelButton.text =
+            if (selectedModelIndex in bookmarkedModels) "Saved" else "Bookmark"
+        binding.bookmarkModelButton.contentDescription =
+            if (selectedModelIndex in bookmarkedModels) {
+                "Remove ${model.title} bookmark"
+            } else {
+                "Bookmark ${model.title}"
+            }
+        binding.sourceAttribution.text =
+            "Source: ${metadata.sourceTitle}  |  Reviewed $CONTENT_REVIEWED_DATE"
+        binding.sourceAttribution.contentDescription =
+            "Source ${metadata.sourceTitle}. Last reviewed $CONTENT_REVIEWED_DATE. Open source."
+    }
+
+    private fun speakTerm(term: String) {
+        val engine = textToSpeech
+        if (engine == null) {
+            Toast.makeText(requireContext(), "Pronunciation is not ready yet", Toast.LENGTH_SHORT)
+                .show()
+            return
+        }
+        engine.speak(term, TextToSpeech.QUEUE_FLUSH, null, "biology-term")
+    }
+
+    private fun setGlossaryText(view: TextView, value: String) {
+        val spannable = SpannableString(value)
+        GLOSSARY.forEach { (term, definition) ->
+            var start = value.indexOf(term, ignoreCase = true)
+            while (start >= 0) {
+                val end = start + term.length
+                spannable.setSpan(
+                    object : ClickableSpan() {
+                        override fun onClick(widget: View) {
+                            AlertDialog.Builder(requireContext())
+                                .setTitle(term.replaceFirstChar { it.uppercase() })
+                                .setMessage(definition)
+                                .setPositiveButton("Close", null)
+                                .show()
+                        }
+
+                        override fun updateDrawState(ds: android.text.TextPaint) {
+                            ds.color = if (highContrast) Color.YELLOW else readyTextColor
+                            ds.isUnderlineText = true
+                        }
+                    },
+                    start,
+                    end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                start = value.indexOf(term, start + term.length, ignoreCase = true)
+            }
+        }
+        view.text = spannable
+        view.movementMethod = LinkMovementMethod.getInstance()
+        view.highlightColor = Color.TRANSPARENT
+    }
+
+    private fun showComparisonSelector() {
+        val choices = MODEL_CATALOG.indices
+            .filter { it != selectedModelIndex }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Compare ${MODEL_CATALOG[selectedModelIndex].shortTitle} with")
+            .setItems(choices.map { MODEL_CATALOG[it].title }.toTypedArray()) { _, which ->
+                showComparison(choices[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showComparison(otherIndex: Int) {
+        val currentIndex = selectedModelIndex
+        val container = LinearLayout(requireContext()).apply {
+            orientation =
+                if (resources.configuration.smallestScreenWidthDp >= 600) {
+                    LinearLayout.HORIZONTAL
+                } else {
+                    LinearLayout.VERTICAL
+                }
+            setPadding(14.dp, 6.dp, 14.dp, 12.dp)
+        }
+        listOf(currentIndex, otherIndex).forEach { modelIndex ->
+            val model = MODEL_CATALOG[modelIndex]
+            val metadata = modelMetadata(model)
+            val panel = createSurfacePanel(
+                topMargin = if (container.orientation == LinearLayout.VERTICAL) 8 else 0
+            ).apply {
+                layoutParams =
+                    if (container.orientation == LinearLayout.HORIZONTAL) {
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                            .apply { marginEnd = 7.dp }
+                    } else {
+                        LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        )
+                    }
+            }
+            panel.addView(createWorkflowText(model.title, 20f, Color.WHITE, true))
+            panel.addView(
+                createWorkflowText(metadata.scientificName, 13f, readyTextColor, false, 3)
+            )
+            panel.addView(
+                createWorkflowText(overviewForLevel(model), 14f, bodyTextColor, false, 9)
+            )
+            panel.addView(
+                createWorkflowText(
+                    "${model.parts.size} identified structures  |  ${modelCategory(model)}",
+                    12f,
+                    selectedTextColor,
+                    true,
+                    10
+                )
+            )
+            panel.addView(
+                createWorkflowAction("Open model", primary = modelIndex != currentIndex, topMargin = 12) {
+                    selectModel(modelIndex)
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        46.dp
+                    ).apply { topMargin = 12.dp }
+                }
+            )
+            container.addView(panel)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Biology comparison")
+            .setView(container)
+            .setPositiveButton("Done", null)
+            .show()
+    }
+
+    private fun configureAccessibility() {
+        binding.accessibilityButton.setOnClickListener { showAccessibilitySettings() }
+        applyAccessibilitySettings()
+    }
+
+    private fun showAccessibilitySettings() {
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 8.dp, 20.dp, 12.dp)
+            background = requireContext().getDrawable(R.drawable.bg_surface_panel)
+        }
+        fun addSwitch(title: String, checked: Boolean, changed: (Boolean) -> Unit) {
+            content.addView(
+                SwitchCompat(requireContext()).apply {
+                    text = title
+                    setTextColor(Color.WHITE)
+                    textSize = 16f
+                    isChecked = checked
+                    minHeight = 52.dp
+                    setOnCheckedChangeListener { _, enabled -> changed(enabled) }
+                }
+            )
+        }
+        addSwitch("Reduced motion", reducedMotion) { reducedMotion = it; saveAccessibilitySettings() }
+        addSwitch("High contrast", highContrast) { highContrast = it; saveAccessibilitySettings() }
+        addSwitch("Larger labels", largerLabels) { largerLabels = it; saveAccessibilitySettings() }
+        addSwitch("Screen reader mode", screenReaderMode) {
+            screenReaderMode = it
+            saveAccessibilitySettings()
+        }
+        BottomSheetDialog(requireContext()).apply {
+            setContentView(content)
+            setOnDismissListener { applyAccessibilitySettings() }
+            show()
+        }
+    }
+
+    private fun saveAccessibilitySettings() {
+        preferences().edit()
+            .putBoolean(PREFERENCE_REDUCED_MOTION, reducedMotion)
+            .putBoolean(PREFERENCE_HIGH_CONTRAST, highContrast)
+            .putBoolean(PREFERENCE_LARGER_LABELS, largerLabels)
+            .putBoolean(PREFERENCE_SCREEN_READER, screenReaderMode)
+            .apply()
+    }
+
+    private fun applyAccessibilitySettings() {
+        if (_binding == null) return
+        if (reducedMotion || screenReaderMode) {
+            isAutoRotating = false
+            updateRotationControl()
+        }
+        val labelScale = if (largerLabels) 1.18f else 1f
+        binding.featureTitle.textSize = 21f * labelScale
+        binding.featureDescription.textSize = 15f * labelScale
+        binding.overviewDescription.textSize = 15f * labelScale
+        binding.partsHeader.textSize = 17f * labelScale
+        binding.modelOverviewHeader.textSize = 17f * labelScale
+        binding.root.background =
+            if (highContrast) {
+                android.graphics.drawable.ColorDrawable(Color.parseColor("#000814"))
+            } else {
+                requireContext().getDrawable(R.drawable.bg_biology_screen)
+            }
+        configurePartList(MODEL_CATALOG[selectedModelIndex])
+        selectPart(selectedPartIndex.coerceAtMost(MODEL_CATALOG[selectedModelIndex].parts.lastIndex), false)
+        runViewerCommand(
+            "setAccessibility($reducedMotion,$highContrast,$largerLabels,$screenReaderMode)"
+        )
+    }
+
+    private fun restoreBiologyExperienceSettings() {
+        readingLevel = runCatching {
+            ReadingLevel.valueOf(
+                preferences().getString(PREFERENCE_READING_LEVEL, ReadingLevel.STUDENT.name)
+                    ?: ReadingLevel.STUDENT.name
+            )
+        }.getOrDefault(ReadingLevel.STUDENT)
+        reducedMotion = preferences().getBoolean(PREFERENCE_REDUCED_MOTION, false)
+        highContrast = preferences().getBoolean(PREFERENCE_HIGH_CONTRAST, false)
+        largerLabels = preferences().getBoolean(PREFERENCE_LARGER_LABELS, false)
+        screenReaderMode = preferences().getBoolean(PREFERENCE_SCREEN_READER, false)
+    }
+
+    private fun configureTabletTwoPane() {
+        if (resources.configuration.smallestScreenWidthDp < 600) return
+        val content = binding.contentColumn
+        val insertAt = content.indexOfChild(binding.modelOverviewPanel) + 1
+        listOf(
+            binding.viewerContainer,
+            binding.interactionHint,
+            binding.partsHeader,
+            binding.partsList,
+            binding.infoPanel
+        ).forEach { (it.parent as? ViewGroup)?.removeView(it) }
+
+        val left = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.38f)
+            setPadding(0, 0, 8.dp, 0)
+            addView(binding.partsHeader)
+            addView(binding.partsList)
+            addView(binding.infoPanel)
+        }
+        val right = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.62f)
+            setPadding(8.dp, 0, 0, 0)
+            addView(
+                binding.viewerContainer,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 560.dp)
+            )
+            addView(binding.interactionHint)
+        }
+        tabletPartsColumn = left
+        tabletTwoPaneContainer = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            isBaselineAligned = false
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 12.dp }
+            addView(left)
+            addView(right)
+        }
+        content.addView(tabletTwoPaneContainer, insertAt)
     }
 
     private fun configureLearningModes() {
@@ -480,11 +849,15 @@ class FirstFragment : Fragment() {
         updateLearningTabs()
 
         val isExplore = mode == ExplorerMode.EXPLORE
+        tabletTwoPaneContainer?.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.viewerContainer.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.interactionHint.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.modelSelectorHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.modelDiscoveryPanel.visibility =
             if (isExplore && modelDiscoveryExpanded) View.VISIBLE else View.GONE
+        binding.modelOverviewHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
+        binding.modelOverviewPanel.visibility =
+            if (isExplore && modelOverviewExpanded) View.VISIBLE else View.GONE
         binding.partsHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.partsList.visibility =
             if (isExplore && partsExpanded) View.VISIBLE else View.GONE
@@ -542,7 +915,7 @@ class FirstFragment : Fragment() {
         introduction.addView(createWorkflowText("GUIDED LESSON", 12f, readyTextColor, true))
         introduction.addView(createWorkflowText(model.title, 26f, Color.WHITE, true, 6))
         introduction.addView(
-            createWorkflowText(modelOverview(model), 16f, bodyTextColor, false, 10)
+            createGlossaryWorkflowText(overviewForLevel(model), 16f, bodyTextColor, 10)
         )
         introduction.addView(
             createWorkflowText(
@@ -596,8 +969,9 @@ class FirstFragment : Fragment() {
             val partPanel = createSurfacePanel(topMargin = 8)
             partPanel.isClickable = true
             partPanel.isFocusable = true
+            val description = partDescriptionForLevel(part)
             partPanel.contentDescription =
-                "${part.title}. ${part.description}. Open in 3D."
+                "${part.title}. $description. Open in 3D."
             partPanel.addView(
                 createWorkflowText(
                     "${index + 1}. ${part.title}",
@@ -606,7 +980,7 @@ class FirstFragment : Fragment() {
                     true
                 )
             )
-            partPanel.addView(createWorkflowText(part.description, 14f, bodyTextColor, false, 7))
+            partPanel.addView(createGlossaryWorkflowText(description, 14f, bodyTextColor, 7))
             partPanel.addView(createWorkflowText("VIEW IN 3D", 11f, readyTextColor, true, 11))
             partPanel.setOnClickListener {
                 selectPart(index, updateViewer = false)
@@ -645,7 +1019,7 @@ class FirstFragment : Fragment() {
                 8.dp
             ).apply { topMargin = 10.dp }
             max = quizQuestions.size
-            setProgress(quizQuestionIndex + 1, true)
+            setProgress(quizQuestionIndex + 1, !reducedMotion)
             progressTintList = android.content.res.ColorStateList.valueOf(selectedTextColor)
             progressBackgroundTintList =
                 android.content.res.ColorStateList.valueOf(Color.parseColor("#243853"))
@@ -900,6 +1274,36 @@ class FirstFragment : Fragment() {
         panel.addView(noteActions)
         binding.workflowPanel.addView(panel)
 
+        val savedModelsPanel = createSurfacePanel(topMargin = 12)
+        savedModelsPanel.addView(createWorkflowText("SAVED MODELS", 12f, readyTextColor, true))
+        if (bookmarkedModels.isEmpty()) {
+            savedModelsPanel.addView(
+                createWorkflowText(
+                    "Bookmark models from their briefing to build a study collection.",
+                    14f,
+                    inactiveTextColor,
+                    false,
+                    7
+                )
+            )
+        } else {
+            bookmarkedModels.sorted().forEach { modelIndex ->
+                val savedModel = MODEL_CATALOG[modelIndex]
+                savedModelsPanel.addView(
+                    createWorkflowAction(savedModel.title, primary = modelIndex == selectedModelIndex, topMargin = 8) {
+                        selectModel(modelIndex)
+                        setLearningMode(ExplorerMode.EXPLORE)
+                    }.apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            46.dp
+                        ).apply { topMargin = 8.dp }
+                    }
+                )
+            }
+        }
+        binding.workflowPanel.addView(savedModelsPanel)
+
         val currentPart = model.parts[selectedPartIndex]
         val currentKey = bookmarkKey(selectedModelIndex, selectedPartIndex)
         val bookmarked = currentKey in bookmarkedParts
@@ -907,7 +1311,12 @@ class FirstFragment : Fragment() {
         bookmarkPanel.addView(createWorkflowText("BOOKMARK CURRENT PART", 12f, selectedTextColor, true))
         bookmarkPanel.addView(createWorkflowText(currentPart.title, 19f, Color.WHITE, true, 6))
         bookmarkPanel.addView(
-            createWorkflowText(currentPart.description, 14f, bodyTextColor, false, 6)
+            createGlossaryWorkflowText(
+                partDescriptionForLevel(currentPart),
+                14f,
+                bodyTextColor,
+                6
+            )
         )
         bookmarkPanel.addView(
             createWorkflowAction(
@@ -999,6 +1408,16 @@ class FirstFragment : Fragment() {
             setLineSpacing(2.dp.toFloat(), 1f)
         }
 
+    private fun createGlossaryWorkflowText(
+        value: String,
+        size: Float,
+        color: Int,
+        topMargin: Int = 0
+    ): TextView =
+        createWorkflowText(value, size, color, false, topMargin).also {
+            setGlossaryText(it, value)
+        }
+
     private fun createWorkflowAction(
         title: String,
         primary: Boolean,
@@ -1034,6 +1453,30 @@ class FirstFragment : Fragment() {
         bookmarkedParts += preferences()
             .getStringSet(PREFERENCE_BOOKMARKS, emptySet())
             .orEmpty()
+        bookmarkedModels.clear()
+        bookmarkedModels += preferences()
+            .getStringSet(PREFERENCE_MODEL_BOOKMARKS, emptySet())
+            .orEmpty()
+            .mapNotNull(String::toIntOrNull)
+            .filter { it in MODEL_CATALOG.indices }
+    }
+
+    private fun toggleModelBookmark(modelIndex: Int) {
+        val added = if (modelIndex in bookmarkedModels) {
+            bookmarkedModels.remove(modelIndex)
+            false
+        } else {
+            bookmarkedModels.add(modelIndex)
+            true
+        }
+        preferences().edit()
+            .putStringSet(PREFERENCE_MODEL_BOOKMARKS, bookmarkedModels.map(Int::toString).toSet())
+            .apply()
+        updateModelBriefing()
+        renderModelCatalog()
+        binding.root.announceForAccessibility(
+            if (added) "Model bookmarked" else "Model bookmark removed"
+        )
     }
 
     private fun toggleBookmark(modelIndex: Int, partIndex: Int) {
@@ -1105,6 +1548,43 @@ class FirstFragment : Fragment() {
     private fun modelOverview(model: BiologyModel): String =
         MODEL_OVERVIEWS[model.fileName]
             ?: "${model.title} is explored here as a three-dimensional biological structure."
+
+    private fun overviewForLevel(model: BiologyModel): String =
+        when (readingLevel) {
+            ReadingLevel.BEGINNER ->
+                BEGINNER_OVERVIEWS[model.fileName]
+                    ?: "${model.title} is a biological structure with parts that work together."
+            ReadingLevel.STUDENT -> modelOverview(model)
+            ReadingLevel.ADVANCED ->
+                "${modelOverview(model)} ${ADVANCED_CONTEXT[model.fileName] ?: modelFact(model)}"
+        }
+
+    private fun partDescriptionForLevel(part: AnatomyPart): String =
+        when (readingLevel) {
+            ReadingLevel.BEGINNER -> part.description
+                .replace("selective", "controlling")
+                .replace("osmotic pressure", "changes in water pressure")
+                .replace("synthesize", "make")
+                .replace("catalyzes", "helps carry out")
+                .replace("hydrophobic", "water-repelling")
+                .replace("lumen", "inner space")
+            ReadingLevel.STUDENT -> part.description
+            ReadingLevel.ADVANCED -> {
+                val context = ADVANCED_PART_CONTEXT.entries.firstOrNull {
+                    part.title.contains(it.key, ignoreCase = true)
+                }?.value ?: "Its molecular organization links structure directly to biological function."
+                "${part.description} $context"
+            }
+        }
+
+    private fun modelMetadata(model: BiologyModel): ModelMetadata =
+        MODEL_METADATA[model.fileName] ?: ModelMetadata(
+            commonName = model.title,
+            scientificName = model.title,
+            pronunciation = model.title,
+            sourceTitle = "OpenStax Biology 2e",
+            sourceUrl = OPENSTAX_EUKARYOTIC_CELLS
+        )
 
     private fun modelFact(model: BiologyModel): String =
         MODEL_FACTS[model.fileName]
@@ -1285,7 +1765,12 @@ class FirstFragment : Fragment() {
             width = ViewGroup.LayoutParams.MATCH_PARENT
             height = ViewGroup.LayoutParams.WRAP_CONTENT
             gravity = Gravity.CENTER
-            text = if (available) "READY" else "NEEDS FILE"
+            text = when {
+                index in bookmarkedModels && available -> "SAVED | READY"
+                index in bookmarkedModels -> "SAVED | NEEDS FILE"
+                available -> "READY"
+                else -> "NEEDS FILE"
+            }
             setTextColor(if (available) readyTextColor else inactiveTextColor)
             textSize = 9f
             typeface = Typeface.DEFAULT_BOLD
@@ -1317,8 +1802,10 @@ class FirstFragment : Fragment() {
             setPadding(14.dp, 0, 12.dp, 0)
             text = "${index + 1}   ${part.title}"
             setTextColor(Color.WHITE)
-            textSize = 15f
+            textSize = if (largerLabels) 18f else 15f
             maxLines = 1
+            contentDescription =
+                "${part.title}. ${partDescriptionForLevel(part)}. Part ${index + 1}."
             background = requireContext().getDrawable(
                 if (index == selectedPartIndex) {
                     R.drawable.bg_part_row_selected
@@ -1341,6 +1828,7 @@ class FirstFragment : Fragment() {
         updateModelSelectionStyles()
         configurePartList(model)
         selectPart(0, updateViewer = false)
+        updateModelBriefing()
         binding.fullScreenTitle.text = model.title
         loadModel(model)
         if (currentMode != ExplorerMode.EXPLORE) renderActiveWorkflow()
@@ -1457,10 +1945,17 @@ class FirstFragment : Fragment() {
         val part = model.parts[index]
         binding.featureNumber.text = (index + 1).toString()
         binding.featureTitle.text = part.title
-        binding.featureDescription.text = part.description
+        setGlossaryText(binding.featureDescription, partDescriptionForLevel(part))
+        binding.infoPanel.contentDescription =
+            "${part.title}. ${partDescriptionForLevel(part)}. Tap for details."
 
         if (updateViewer) {
             binding.modelWebView.evaluateJavascript("window.focusPart($index)", null)
+            if (screenReaderMode) {
+                binding.root.announceForAccessibility(
+                    "${part.title}. ${partDescriptionForLevel(part)}"
+                )
+            }
         }
     }
 
@@ -1496,10 +1991,21 @@ class FirstFragment : Fragment() {
         )
         content.addView(
             TextView(requireContext()).apply {
-                text = part.description
+                val description = partDescriptionForLevel(part)
                 setTextColor(Color.parseColor("#C7D4E7"))
-                textSize = 16f
+                textSize = if (largerLabels) 19f else 16f
                 setLineSpacing(3.dp.toFloat(), 1f)
+                setGlossaryText(this, description)
+            }
+        )
+        content.addView(
+            createSheetAction("Hear pronunciation", true) {
+                speakTerm(part.title)
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    46.dp
+                ).apply { topMargin = 12.dp }
             }
         )
 
@@ -1664,7 +2170,7 @@ class FirstFragment : Fragment() {
         binding.viewerStatusActions.visibility = if (available) View.GONE else View.VISIBLE
         binding.viewerStatusText.text =
             if (available) "Preparing ${model.title}…" else "${model.title} is not available."
-        isAutoRotating = true
+        isAutoRotating = !reducedMotion && !screenReaderMode
         updateRotationControl()
         binding.zoomLevel.text = "100%"
         binding.orientationIndicator.text = "FRONT"
@@ -1682,6 +2188,10 @@ class FirstFragment : Fragment() {
             append("&rotationSpeed=${ROTATION_SPEEDS[rotationSpeedIndex]}")
             append("&identifyMode=${if (identifyMode) 1 else 0}")
             append("&showAllLabels=${if (showAllLabels) 1 else 0}")
+            append("&reducedMotion=${if (reducedMotion) 1 else 0}")
+            append("&highContrast=${if (highContrast) 1 else 0}")
+            append("&largerLabels=${if (largerLabels) 1 else 0}")
+            append("&screenReader=${if (screenReaderMode) 1 else 0}")
         }
         binding.modelWebView.loadUrl(query)
     }
@@ -1814,9 +2324,20 @@ class FirstFragment : Fragment() {
         const val PREFERENCE_RECENT_MODELS = "recent_models"
         const val PREFERENCE_FULL_SCREEN_HINT_SHOWN = "full_screen_hint_shown"
         const val PREFERENCE_BOOKMARKS = "bookmarked_parts"
+        const val PREFERENCE_MODEL_BOOKMARKS = "bookmarked_models"
         const val PREFERENCE_TOTAL_XP = "total_xp"
         const val PREFERENCE_IDENTIFY_MODE = "identify_mode"
         const val PREFERENCE_SHOW_ALL_LABELS = "show_all_labels"
+        const val PREFERENCE_READING_LEVEL = "reading_level"
+        const val PREFERENCE_REDUCED_MOTION = "reduced_motion"
+        const val PREFERENCE_HIGH_CONTRAST = "high_contrast"
+        const val PREFERENCE_LARGER_LABELS = "larger_labels"
+        const val PREFERENCE_SCREEN_READER = "screen_reader_mode"
+        const val CONTENT_REVIEWED_DATE = "29 Jul 2026"
+        const val OPENSTAX_EUKARYOTIC_CELLS =
+            "https://openstax.org/books/biology-2e/pages/4-3-eukaryotic-cells"
+        const val OPENSTAX_PROKARYOTIC_CELLS =
+            "https://openstax.org/books/biology-2e/pages/4-2-prokaryotic-cells"
         const val MAX_RECENT_MODELS = 5
         const val MAX_QUIZ_QUESTIONS = 5
         const val FULL_SCREEN_CONTROLS_TIMEOUT_MS = 3_000L
@@ -1904,6 +2425,82 @@ class FirstFragment : Fragment() {
                 "A mature plant cell's central vacuole can occupy most of the cell's internal volume.",
             "WhiteBloodCell.glb" to
                 "White blood cells can squeeze between vessel-wall cells to reach infected tissue."
+        )
+        val BEGINNER_OVERVIEWS = mapOf(
+            "Bacteriacell.glb" to "A bacterial cell is a tiny living cell without a nucleus. Its parts help it find energy, grow, and reproduce.",
+            "Cell Membrane.glb" to "The cell membrane is a flexible boundary that controls what enters and leaves a cell.",
+            "Chloroplast.glb" to "A chloroplast is the part of a plant cell that captures sunlight to help make food.",
+            "epithelial microvilli.glb" to "Microvilli are tiny finger-like folds that help a cell absorb more material.",
+            "Lysosome.glb" to "A lysosome breaks down waste and reuses useful materials inside a cell.",
+            "Mitochondrion.glb" to "A mitochondrion releases usable energy from food for the cell.",
+            "Neuron.glb" to "A neuron is a nerve cell that carries messages through the body.",
+            "plant cell wall.glb" to "A plant cell wall is a strong outer layer that supports and protects the cell.",
+            "PlantCell.glb" to "A plant cell uses sunlight, stores water, and has a firm wall for support.",
+            "Ribosomes.glb" to "Ribosomes are tiny structures that build the proteins a cell needs.",
+            "Rough Endoplasmic Reticulum.glb" to "The rough ER helps make, fold, and move proteins.",
+            "Smooth Endoplasmic Reticulum.glb" to "The smooth ER makes fats, stores calcium, and helps remove harmful chemicals.",
+            "Vacuole.glb" to "A vacuole stores water and other materials, especially in plant cells.",
+            "WhiteBloodCell.glb" to "A white blood cell helps protect the body from infection and damaged cells."
+        )
+        val ADVANCED_CONTEXT = mapOf(
+            "Bacteriacell.glb" to "Its lack of internal membrane compartments couples transcription, translation, transport, and energy metabolism within one cytoplasmic system.",
+            "Cell Membrane.glb" to "Its asymmetric lipid bilayer and embedded proteins create electrochemical gradients and regulated signaling platforms.",
+            "Chloroplast.glb" to "Photophosphorylation occurs across thylakoid membranes, while carbon fixation proceeds in the stroma.",
+            "epithelial microvilli.glb" to "Actin-bundle organization and membrane transporters couple morphology to vectorial absorption.",
+            "Lysosome.glb" to "V-type ATPases acidify the lumen, enabling hydrolases and autophagic recycling pathways.",
+            "Mitochondrion.glb" to "Chemiosmotic coupling across the inner membrane drives oxidative phosphorylation and ATP synthesis.",
+            "Neuron.glb" to "Membrane potentials, axonal conduction, and synaptic transmission coordinate rapid information processing.",
+            "plant cell wall.glb" to "Cellulose microfibrils, hemicellulose, and pectin form a mechanically responsive extracellular matrix.",
+            "PlantCell.glb" to "Compartmentalization integrates photosynthesis, respiration, turgor regulation, and cell-wall mechanics.",
+            "Ribosomes.glb" to "Ribosomal RNA performs key structural and catalytic roles during codon-directed translation.",
+            "Rough Endoplasmic Reticulum.glb" to "Co-translational translocation connects signal recognition, folding, glycosylation, and quality control.",
+            "Smooth Endoplasmic Reticulum.glb" to "Its membrane enzymes coordinate lipid metabolism, xenobiotic processing, and calcium homeostasis.",
+            "Vacuole.glb" to "Tonoplast transport establishes ion gradients that regulate turgor, pH, storage, and degradation.",
+            "WhiteBloodCell.glb" to "Leukocyte subtype, receptor repertoire, and effector mechanisms determine innate or adaptive immune function."
+        )
+        val ADVANCED_PART_CONTEXT = mapOf(
+            "membrane" to "Transport proteins and lipid composition regulate permeability and signaling.",
+            "nucleus" to "Nuclear pores coordinate selective traffic between nucleoplasm and cytoplasm.",
+            "nucleoid" to "DNA topology and nucleoid-associated proteins compact and regulate the chromosome.",
+            "ribosome" to "Ribosomal RNA contributes directly to decoding and peptide-bond formation.",
+            "mitochond" to "Electron transport establishes the proton-motive force used by ATP synthase.",
+            "chloroplast" to "Thylakoid electron transport couples light capture to ATP and NADPH production.",
+            "wall" to "Polymer composition determines tensile strength, porosity, and mechanical response.",
+            "axon" to "Voltage-gated ion channels support regenerative action-potential propagation.",
+            "dendrite" to "Branched geometry supports synaptic integration across many inputs.",
+            "vacuole" to "Solute transport across the tonoplast controls osmotic potential and turgor.",
+            "lumen" to "Its ionic and enzymatic conditions are maintained separately from the cytosol."
+        )
+        val GLOSSARY = linkedMapOf(
+            "prokaryotic" to "Describes a cell whose DNA is not enclosed by a membrane-bound nucleus.",
+            "eukaryotic" to "Describes a cell with a membrane-bound nucleus and internal organelles.",
+            "organelle" to "A specialized structure inside a cell that performs particular functions.",
+            "ATP" to "Adenosine triphosphate, the main immediately usable energy carrier in cells.",
+            "DNA" to "Deoxyribonucleic acid, the molecule that stores hereditary information.",
+            "RNA" to "Ribonucleic acid, a family of molecules involved in gene expression and protein synthesis.",
+            "cytoplasm" to "The material inside the cell membrane, excluding the nucleus in eukaryotic cells.",
+            "enzyme" to "A biological catalyst that speeds a chemical reaction without being consumed.",
+            "photosynthesis" to "The process that uses light energy to build energy-rich organic molecules.",
+            "protein" to "A folded chain of amino acids that performs structural, catalytic, or signaling roles.",
+            "lipid" to "A water-insoluble or partly water-insoluble molecule used in membranes and energy storage.",
+            "osmosis" to "The net movement of water across a selectively permeable membrane.",
+            "turgor" to "Pressure of cell contents against a plant cell wall, helping support the tissue."
+        )
+        val MODEL_METADATA = mapOf(
+            "Bacteriacell.glb" to ModelMetadata("Bacterial cell", "Prokaryotic cell (Domain Bacteria)", "bacterial cell", "OpenStax Biology 2e: Prokaryotic Cells", OPENSTAX_PROKARYOTIC_CELLS),
+            "Cell Membrane.glb" to ModelMetadata("Cell membrane", "Plasma membrane", "plasma membrane", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Chloroplast.glb" to ModelMetadata("Chloroplast", "Chloroplast", "chloroplast", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "epithelial microvilli.glb" to ModelMetadata("Microvilli", "Epithelial microvilli", "epithelial microvilli", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Lysosome.glb" to ModelMetadata("Lysosome", "Lysosome", "lysosome", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Mitochondrion.glb" to ModelMetadata("Mitochondrion", "Mitochondrion", "mitochondrion", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Neuron.glb" to ModelMetadata("Nerve cell", "Neuron", "neuron", "OpenStax Biology 2e", "https://openstax.org/books/biology-2e/pages/35-2-how-neurons-communicate"),
+            "plant cell wall.glb" to ModelMetadata("Plant cell wall", "Primary and secondary cell wall", "plant cell wall", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "PlantCell.glb" to ModelMetadata("Plant cell", "Plant eukaryotic cell", "plant cell", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Ribosomes.glb" to ModelMetadata("Ribosome", "Ribosome", "ribosome", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Rough Endoplasmic Reticulum.glb" to ModelMetadata("Rough ER", "Rough endoplasmic reticulum", "rough endoplasmic reticulum", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Smooth Endoplasmic Reticulum.glb" to ModelMetadata("Smooth ER", "Smooth endoplasmic reticulum", "smooth endoplasmic reticulum", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "Vacuole.glb" to ModelMetadata("Vacuole", "Central vacuole", "vacuole", "OpenStax Biology 2e: Eukaryotic Cells", OPENSTAX_EUKARYOTIC_CELLS),
+            "WhiteBloodCell.glb" to ModelMetadata("White blood cell", "Leukocyte", "leukocyte", "OpenStax Biology 2e", "https://openstax.org/books/biology-2e/pages/42-1-innate-immune-response")
         )
 
         fun part(
@@ -2059,6 +2656,14 @@ private data class AnatomyPart(
     val normal: String
 )
 
+private data class ModelMetadata(
+    val commonName: String,
+    val scientificName: String,
+    val pronunciation: String,
+    val sourceTitle: String,
+    val sourceUrl: String
+)
+
 private data class CameraPreset(
     val key: String,
     val shortLabel: String,
@@ -2078,6 +2683,12 @@ private enum class ExplorerMode(val title: String) {
     LEARN("Learn"),
     QUIZ("Quiz"),
     NOTES("Notes")
+}
+
+private enum class ReadingLevel {
+    BEGINNER,
+    STUDENT,
+    ADVANCED
 }
 
 private val Int.dp: Int
