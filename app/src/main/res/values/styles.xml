@@ -8,4 +8,54 @@
         <item name="android:textColor">#8292B2</item>
         <item name="android:textSize">13sp</item>
     </style>
+
+    <style name="BiologyBottomNavCenterItem">
+        <item name="android:layout_width">70dp</item>
+        <item name="android:layout_height">70dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/bg_circle_purple</item>
+        <item name="android:textColor">#D9D1FF</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="BiologyExploreTab">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">#A9B2C8</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="BiologyExploreTabActive" parent="BiologyExploreTab">
+        <item name="android:textColor">#B27CFF</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="BiologyToolRailItem">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">#E8ECF7</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="BiologyActionButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/bg_action_button</item>
+        <item name="android:textColor">#CBD5EA</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="BiologyActionButtonActive" parent="BiologyActionButton">
+        <item name="android:background">@drawable/bg_action_button_active</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

@@ -23,6 +23,7 @@ class FirstFragment : Fragment() {
     private var _binding: FragmentFirstBinding? = null
     private val binding get() = _binding!!
     private var selectedModelIndex = 0
+    private var selectedPartIndex = 0
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -36,6 +37,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         configureViewer()
+        configurePartList()
         configureModelStrip()
     }
 
@@ -75,22 +77,30 @@ class FirstFragment : Fragment() {
         selectModel(0)
     }
 
+    private fun configurePartList() {
+        binding.partsList.removeAllViews()
+        CELL_PARTS.forEachIndexed { index, part ->
+            binding.partsList.addView(createPartRow(index, part))
+        }
+        selectPart(0)
+    }
+
     private fun createModelStripItem(index: Int, model: BiologyModel): View {
         val item = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(4.dp, 0, 4.dp, 0)
-            layoutParams = LinearLayout.LayoutParams(96.dp, ViewGroup.LayoutParams.MATCH_PARENT)
+            layoutParams = LinearLayout.LayoutParams(154.dp, ViewGroup.LayoutParams.MATCH_PARENT)
             setOnClickListener { selectModel(index) }
         }
 
         val badge = TextView(requireContext()).apply {
-            width = 72.dp
-            height = 72.dp
+            width = 132.dp
+            height = 78.dp
             gravity = Gravity.CENTER
             text = model.badge
             setTextColor(Color.WHITE)
-            textSize = 18f
+            textSize = 20f
             typeface = Typeface.DEFAULT_BOLD
             background = requireContext().getDrawable(
                 if (index == selectedModelIndex) R.drawable.bg_thumbnail_selected else R.drawable.bg_thumbnail
@@ -112,6 +122,29 @@ class FirstFragment : Fragment() {
         return item
     }
 
+    private fun createPartRow(index: Int, part: CellPart): View {
+        val row = TextView(requireContext()).apply {
+            height = 48.dp
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(10.dp, 0, 8.dp, 0)
+            text = "${part.badge}  ${part.title}     ${index + 1}"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            maxLines = 1
+            background = requireContext().getDrawable(
+                if (index == selectedPartIndex) R.drawable.bg_part_row_selected else R.drawable.bg_part_row
+            )
+            setOnClickListener { selectPart(index) }
+        }
+        row.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            48.dp
+        ).apply {
+            bottomMargin = 6.dp
+        }
+        return row
+    }
+
     private fun selectModel(index: Int) {
         selectedModelIndex = index
 
@@ -129,10 +162,24 @@ class FirstFragment : Fragment() {
         loadModel(MODEL_CATALOG[index])
     }
 
+    private fun selectPart(index: Int) {
+        selectedPartIndex = index
+
+        CELL_PARTS.forEachIndexed { childIndex, _ ->
+            binding.partsList.getChildAt(childIndex)?.background = requireContext().getDrawable(
+                if (childIndex == selectedPartIndex) R.drawable.bg_part_row_selected else R.drawable.bg_part_row
+            )
+        }
+
+        val part = CELL_PARTS[index]
+        binding.featureNumber.text = (index + 1).toString()
+        binding.featureTitle.text = part.title
+        binding.featureDescription.text = part.description
+        binding.partCallout.text = "${index + 1}  ${part.title}"
+    }
+
     private fun loadModel(model: BiologyModel) {
         binding.modelTitle.text = model.title
-        binding.featureTitle.text = model.featureTitle
-        binding.featureDescription.text = model.description
         binding.featureThumb.text = model.badge
 
         if (isBundledModelAvailable(model.fileName)) {
@@ -160,6 +207,17 @@ class FirstFragment : Fragment() {
         val selectedTextColor: Int = Color.parseColor("#AFA3FF")
         val inactiveTextColor: Int = Color.parseColor("#98A8C2")
 
+        val CELL_PARTS = listOf(
+            CellPart("Nucleus", "NU", "The nucleus is the control center of the cell. It contains genetic material and regulates cell activities."),
+            CellPart("Rough ER", "ER", "Rough endoplasmic reticulum supports protein folding and transport through the cell."),
+            CellPart("Golgi Apparatus", "GA", "The Golgi apparatus modifies, sorts, and packages proteins for delivery."),
+            CellPart("Mitochondria", "MT", "Mitochondria generate ATP, the usable energy that powers many cell processes."),
+            CellPart("Lysosomes", "LY", "Lysosomes break down waste and recycle worn cellular components."),
+            CellPart("Ribosomes", "RB", "Ribosomes assemble amino acids into proteins using genetic instructions."),
+            CellPart("Cell Membrane", "CM", "The membrane controls what enters and leaves the cell."),
+            CellPart("Cytoplasm", "CY", "Cytoplasm suspends organelles and hosts many cell reactions.")
+        )
+
         val MODEL_CATALOG = listOf(
             BiologyModel("Bacteriacell.glb", "Bacteria Cell", "Bacteria", "BC", "Prokaryote", "A compact prokaryotic model showing the cell envelope, cytoplasm, and internal organization."),
             BiologyModel("Cell Membrane.glb", "Cell Membrane", "Membrane", "CM", "Selective barrier", "The membrane controls movement in and out of the cell through a flexible phospholipid boundary."),
@@ -185,6 +243,12 @@ private data class BiologyModel(
     val shortTitle: String,
     val badge: String,
     val featureTitle: String,
+    val description: String
+)
+
+private data class CellPart(
+    val title: String,
+    val badge: String,
     val description: String
 )
 

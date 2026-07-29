@@ -2,17 +2,17 @@
     <string name="app_name">Biology</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
-    <string name="first_fragment_label">Biology Models</string>
-    <string name="second_fragment_label">Second Fragment</string>
+    <string name="first_fragment_label">Explore</string>
+    <string name="second_fragment_label">Library</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
     <string name="model_browser_title">Biology 3D Models</string>
     <string name="model_browser_tagline">Explore. Learn. Understand Life.</string>
     <string name="model_browser_help">Swipe to rotate model</string>
     <string name="selected_model">%1$s - %2$s</string>
-    <string name="model_type_label">3D Model</string>
+    <string name="model_type_label">3D Interactive Model</string>
     <string name="quiz">Quiz</string>
-    <string name="learn_more">Learn more  &gt;</string>
+    <string name="learn_more">Learn More</string>
     <string name="back_arrow">&lt;</string>
     <string name="dna_badge">DNA</string>
     <string name="model_thumb">3D</string>
@@ -22,8 +22,22 @@
     <string name="nav_home">Home</string>
     <string name="nav_explore">Explore</string>
     <string name="nav_library">Library</string>
+    <string name="nav_ar">AR</string>
     <string name="nav_progress">Progress</string>
     <string name="nav_profile">Profile</string>
+    <string name="xp_points">XP  2,450  &gt;</string>
+    <string name="tab_explore">Explore</string>
+    <string name="tab_learn">Learn</string>
+    <string name="tab_quiz">Quiz</string>
+    <string name="tab_notes">Notes</string>
+    <string name="cell_parts">Cell Parts</string>
+    <string name="tool_3d">3D</string>
+    <string name="tool_cross_section">Cross\nSection</string>
+    <string name="tool_fullscreen">Fullscreen</string>
+    <string name="tool_glow">Glow</string>
+    <string name="fun_fact">Fun Fact</string>
+    <string name="bookmark">Bookmark</string>
+    <string name="try_these">Try These</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
