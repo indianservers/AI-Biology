@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="246dp"
+    android:layout_margin="6dp"
+    android:background="@drawable/bg_surface_panel"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:background="@drawable/bg_thumbnail">
+
+        <ImageView
+            android:id="@+id/modelThumbnail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+
+        <TextView
+            android:id="@+id/modelPlaceholder"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:textColor="#FFFFFF"
+            android:textSize="25sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_gravity="top|start"
+            android:layout_margin="7dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/badge3d"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:background="@drawable/bg_status_ready"
+                android:gravity="center"
+                android:text="3D"
+                android:textColor="#73E8C5"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/badgeAr"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:layout_marginStart="5dp"
+                android:background="@drawable/bg_filter_chip_selected"
+                android:gravity="center"
+                android:text="AR"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/badgePremium"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:layout_marginStart="5dp"
+                android:background="@drawable/bg_filter_chip"
+                android:gravity="center"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:text="PRO"
+                android:textColor="#FFFFFF"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/favouriteButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top|end"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Add model to favourites"
+            android:padding="12dp"
+            android:src="@android:drawable/btn_star_big_off"
+            android:tint="#FFFFFF" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/modelCardTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/modelCardCategory"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#91A6C5"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/modelDownloadState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#73E8C5"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <ProgressBar
+        android:id="@+id/modelLearningProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="7dp"
+        android:max="100"
+        android:progressBackgroundTint="#243853"
+        android:progressTint="#8D65FF" />
+</LinearLayout>
+
