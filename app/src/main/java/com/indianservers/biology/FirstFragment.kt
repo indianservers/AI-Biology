@@ -57,6 +57,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
+@Suppress("DEPRECATION")
 class FirstFragment : Fragment() {
 
     private var _binding: FragmentFirstBinding? = null
