@@ -190,7 +190,7 @@ class FirstFragment : Fragment() {
         } else {
             binding.modelProgress.visibility = View.GONE
             binding.modelWebView.loadUrl(
-                "file:///android_asset/model_viewer.html?pending=${Uri.encode(model.fileName)}" +
+                "file:///android_asset/model_viewer.html?fallback=${Uri.encode(model.fileName)}" +
                     "&title=${Uri.encode(model.title)}"
             )
         }
