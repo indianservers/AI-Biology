@@ -46,6 +46,13 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import com.indianservers.biology.databinding.FragmentFirstBinding
+import com.indianservers.biology.data.AnatomyPart
+import com.indianservers.biology.data.BiologyCategories
+import com.indianservers.biology.data.BiologyModel
+import com.indianservers.biology.data.CameraPreset
+import com.indianservers.biology.data.ModelPart
+import com.indianservers.biology.data.ModelRepository
+import com.indianservers.biology.ui.ModelLibraryBottomSheet
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import org.json.JSONArray
@@ -53,6 +60,8 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -112,6 +121,7 @@ class FirstFragment : Fragment() {
     private var tabletPartsColumn: LinearLayout? = null
     private var textToSpeech: TextToSpeech? = null
     private lateinit var modelStorageDirectory: File
+    private lateinit var modelRepository: ModelRepository
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -126,6 +136,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
+        modelRepository = ModelRepository(requireContext())
         restoreIdentificationSettings()
         restoreBiologyExperienceSettings()
         restoreBookmarks()
@@ -182,6 +193,7 @@ class FirstFragment : Fragment() {
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
+        modelRepository.close()
         if (isFullScreen) exitFullScreen()
         binding.modelWebView.removeJavascriptInterface(BRIDGE_NAME)
         binding.modelWebView.destroy()
@@ -209,14 +221,19 @@ class FirstFragment : Fragment() {
                     }
 
                     val fileName = uri.lastPathSegment ?: return null
-                    val modelFile = findStoredModel(fileName) ?: return null
+                    val input = findStoredModel(fileName)
+                        ?.let(::FileInputStream)
+                        ?: runCatching {
+                            requireContext().assets.open("$MODEL_ASSET_DIRECTORY/$fileName")
+                        }.getOrNull()
+                        ?: return null
                     return WebResourceResponse(
                         GLB_MIME_TYPE,
                         null,
                         200,
                         "OK",
                         mapOf("Access-Control-Allow-Origin" to "*"),
-                        FileInputStream(modelFile)
+                        input
                     )
                 }
             }
@@ -259,12 +276,13 @@ class FirstFragment : Fragment() {
 
     private fun configureViewerControls() {
         binding.rotateLeftButton.setOnClickListener {
-            runViewerCommand("rotateBy(-30)")
+            cameraPresetIndex = 0
+            runViewerCommand("resetView()")
+            binding.orientationIndicator.text = "Front"
             onViewerControlUsed()
         }
         binding.rotateRightButton.setOnClickListener {
-            runViewerCommand("rotateBy(30)")
-            onViewerControlUsed()
+            showPartsPanel()
         }
         binding.zoomOutButton.setOnClickListener {
             runViewerCommand("zoomBy(1.2)")
@@ -275,9 +293,7 @@ class FirstFragment : Fragment() {
             onViewerControlUsed()
         }
         binding.resetViewButton.setOnClickListener {
-            cameraPresetIndex = 0
-            updateCameraPresetControl()
-            runViewerCommand("resetView()")
+            runViewerCommand("toggleSectionView()")
             onViewerControlUsed()
         }
         binding.rotationSpeedButton.setOnClickListener {
@@ -287,9 +303,7 @@ class FirstFragment : Fragment() {
             onViewerControlUsed()
         }
         binding.cameraViewButton.setOnClickListener {
-            cameraPresetIndex = (cameraPresetIndex + 1) % CAMERA_PRESETS.size
-            updateCameraPresetControl()
-            runViewerCommand("setCameraPreset('${CAMERA_PRESETS[cameraPresetIndex].key}')")
+            runViewerCommand("toggleExplodedView()")
             onViewerControlUsed()
         }
         binding.rotationButton.setOnClickListener {
@@ -301,6 +315,12 @@ class FirstFragment : Fragment() {
         binding.fullScreenButton.setOnClickListener {
             if (isFullScreen) exitFullScreen() else enterFullScreen()
         }
+        binding.orientationIndicator.setOnClickListener { showOrientationSelector() }
+        binding.askAiButton.setOnClickListener { showAskAiPanel() }
+        binding.arButton.setOnClickListener {
+            runViewerCommand("activateAR()")
+            onViewerControlUsed()
+        }
         binding.fullScreenClose.setOnClickListener { exitFullScreen() }
         binding.retryModelButton.setOnClickListener {
             loadModel(MODEL_CATALOG[selectedModelIndex])
@@ -309,11 +329,11 @@ class FirstFragment : Fragment() {
             binding.viewerStatusOverlay.visibility = View.GONE
         }
         updateRotationSpeedControl()
-        updateCameraPresetControl()
+        updateViewerCapabilities(MODEL_CATALOG[selectedModelIndex])
     }
 
     private fun updateRotationControl() {
-        binding.rotationButton.text = if (isAutoRotating) "Ⅱ" else "▶"
+        binding.rotationButton.text = if (isAutoRotating) "II" else ">"
         binding.rotationButton.contentDescription =
             if (isAutoRotating) "Pause automatic rotation" else "Resume automatic rotation"
         binding.rotationButton.tooltipText = binding.rotationButton.contentDescription
@@ -328,9 +348,35 @@ class FirstFragment : Fragment() {
 
     private fun updateCameraPresetControl() {
         val preset = CAMERA_PRESETS[cameraPresetIndex]
-        binding.cameraViewButton.text = preset.shortLabel
-        binding.cameraViewButton.contentDescription = "${preset.title} camera view"
-        binding.cameraViewButton.tooltipText = binding.cameraViewButton.contentDescription
+        binding.orientationIndicator.text = preset.title
+        binding.orientationIndicator.contentDescription =
+            "${preset.title} orientation. Tap to choose another orientation."
+    }
+
+    private fun updateViewerCapabilities(model: BiologyModel) {
+        binding.rotateRightButton.visibility =
+            if (model.supportsPartSelection) View.VISIBLE else View.GONE
+        binding.cameraViewButton.visibility =
+            if (model.supportsExplodedView) View.VISIBLE else View.GONE
+        binding.resetViewButton.visibility =
+            if (model.supportsSectionView) View.VISIBLE else View.GONE
+        binding.arButton.visibility = if (model.supportsAr) View.VISIBLE else View.GONE
+    }
+
+    private fun showOrientationSelector() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Camera orientation")
+            .setSingleChoiceItems(
+                CAMERA_PRESETS.map(CameraPreset::title).toTypedArray(),
+                cameraPresetIndex
+            ) { dialog, index ->
+                cameraPresetIndex = index
+                updateCameraPresetControl()
+                runViewerCommand("setCameraPreset('${CAMERA_PRESETS[index].key}')")
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun runViewerCommand(command: String) {
@@ -357,7 +403,7 @@ class FirstFragment : Fragment() {
         isFullScreen = true
         requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         binding.fullScreenTitle.text = MODEL_CATALOG[selectedModelIndex].title
-        binding.fullScreenButton.text = "×"
+        binding.fullScreenButton.text = "X"
         binding.fullScreenButton.contentDescription = "Close full screen"
         binding.fullScreenButton.tooltipText = "Close full screen"
         binding.fullScreenOverlay.visibility = View.VISIBLE
@@ -387,7 +433,7 @@ class FirstFragment : Fragment() {
         uiHandler.removeCallbacks(hideFullScreenControls)
         uiHandler.removeCallbacks(hideFullScreenHint)
         setFullScreenControlsVisible(true)
-        binding.fullScreenButton.text = "⛶"
+        binding.fullScreenButton.text = "[]"
         binding.fullScreenButton.contentDescription = "Open full screen"
         binding.fullScreenButton.tooltipText = "Open full screen"
         binding.fullScreenButton.visibility = View.VISIBLE
@@ -474,17 +520,16 @@ class FirstFragment : Fragment() {
 
     private fun configureExpanders() {
         binding.modelSelectorHeader.setOnClickListener {
-            modelDiscoveryExpanded = !modelDiscoveryExpanded
-            binding.modelDiscoveryPanel.visibility =
-                if (modelDiscoveryExpanded) View.VISIBLE else View.GONE
-            val icon =
-                if (modelDiscoveryExpanded) {
-                    R.drawable.ic_chevron_up
-                } else {
-                    R.drawable.ic_chevron_down
-                }
-            binding.modelSelectorHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
+            showModelLibrary()
         }
+        modelDiscoveryExpanded = false
+        binding.modelDiscoveryPanel.visibility = View.GONE
+        binding.modelSelectorHeader.setCompoundDrawablesWithIntrinsicBounds(
+            0,
+            0,
+            R.drawable.ic_chevron_up,
+            0
+        )
 
         binding.modelOverviewHeader.setOnClickListener {
             modelOverviewExpanded = !modelOverviewExpanded
@@ -816,7 +861,10 @@ class FirstFragment : Fragment() {
             setPadding(8.dp, 0, 0, 0)
             addView(
                 binding.viewerContainer,
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 560.dp)
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    resources.getDimensionPixelSize(R.dimen.biology_viewer_height)
+                )
             )
             addView(binding.interactionHint)
         }
@@ -855,7 +903,7 @@ class FirstFragment : Fragment() {
         binding.interactionHint.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.modelSelectorHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.modelDiscoveryPanel.visibility =
-            if (isExplore && modelDiscoveryExpanded) View.VISIBLE else View.GONE
+            View.GONE
         binding.modelOverviewHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.modelOverviewPanel.visibility =
             if (isExplore && modelOverviewExpanded) View.VISIBLE else View.GONE
@@ -1200,7 +1248,12 @@ class FirstFragment : Fragment() {
         quizScore = 0
         quizSelectedAnswer = null
         quizAwardedQuestions.clear()
-        quizQuestions = model.parts.mapIndexed { partIndex, part ->
+        val partOrder = model.parts.indices.toMutableList().apply {
+            remove(selectedPartIndex)
+            add(0, selectedPartIndex)
+        }
+        quizQuestions = partOrder.map { partIndex ->
+            val part = model.parts[partIndex]
             val choices = model.parts
                 .map(AnatomyPart::title)
                 .shuffled(Random(model.fileName.hashCode() + partIndex))
@@ -1544,7 +1597,9 @@ class FirstFragment : Fragment() {
 
     private fun quizBestKey(modelIndex: Int) = "quiz_best_$modelIndex"
 
-    private fun notesKey(modelIndex: Int) = "notes_$modelIndex"
+    private fun notesKey(modelIndex: Int) = "notes_${MODEL_CATALOG[modelIndex].id}"
+
+    private fun exploredPartsKey(modelId: String) = "explored_parts_$modelId"
 
     private fun modelOverview(model: BiologyModel): String =
         MODEL_OVERVIEWS[model.fileName]
@@ -1622,6 +1677,70 @@ class FirstFragment : Fragment() {
 
         renderModelCatalog()
         selectModel(recentModelIndices.firstOrNull() ?: 0)
+    }
+
+    private fun showModelLibrary() {
+        val downloadedIds = modelRepository.downloadedIds()
+        val libraryModels = MODEL_CATALOG.mapIndexed { index, model ->
+            val exploredCount = preferences()
+                .getStringSet(exploredPartsKey(model.id), emptySet())
+                .orEmpty()
+                .size
+            model.copy(
+                isDownloaded = model.id in downloadedIds,
+                isFavourite = index in bookmarkedModels,
+                learningProgress =
+                    if (model.parts.isEmpty()) 0f
+                    else exploredCount.toFloat() / model.parts.size,
+                viewCount =
+                    recentModelIndices.indexOf(index)
+                        .takeIf { it >= 0 }
+                        ?.let { MAX_RECENT_MODELS - it }
+                        ?: 0
+            )
+        }
+        ModelLibraryBottomSheet(
+            context = requireContext(),
+            models = libraryModels,
+            repository = modelRepository,
+            recentModelIds = {
+                recentModelIndices.map { MODEL_CATALOG[it].id }
+            },
+            isAvailable = { isModelAvailable(it.fileName) },
+            isFavourite = { model ->
+                MODEL_CATALOG.indexOfFirst { it.id == model.id } in bookmarkedModels
+            },
+            thumbnailFile = { model ->
+                MODEL_CATALOG.indexOfFirst { it.id == model.id }
+                    .takeIf { it >= 0 }
+                    ?.let(::thumbnailFile)
+            },
+            onSelected = { model ->
+                MODEL_CATALOG.indexOfFirst { it.id == model.id }
+                    .takeIf { it >= 0 }
+                    ?.let(::selectModel)
+            },
+            onFavourite = { model ->
+                MODEL_CATALOG.indexOfFirst { it.id == model.id }
+                    .takeIf { it >= 0 }
+                    ?.let(::toggleModelBookmark)
+            },
+            onUnavailable = { model, reason ->
+                showUnavailableModel(model, reason)
+            }
+        ).show()
+    }
+
+    private fun showUnavailableModel(model: BiologyModel, reason: String) {
+        val sizeLine = model.fileSizeBytes?.let {
+            "\n\nApproximate download size: ${com.indianservers.biology.ui.BiologyModelAdapter.formatBytes(it)}"
+        }.orEmpty()
+        AlertDialog.Builder(requireContext())
+            .setTitle("${model.title} is not installed")
+            .setMessage("$reason$sizeLine")
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Retry") { _, _ -> showModelLibrary() }
+            .show()
     }
 
     private fun createFilterChip(filter: String): TextView =
@@ -1831,6 +1950,7 @@ class FirstFragment : Fragment() {
         selectPart(0, updateViewer = false)
         updateModelBriefing()
         binding.fullScreenTitle.text = model.title
+        updateViewerCapabilities(model)
         loadModel(model)
         if (currentMode != ExplorerMode.EXPLORE) renderActiveWorkflow()
     }
@@ -1944,6 +2064,13 @@ class FirstFragment : Fragment() {
         }
 
         val part = model.parts[index]
+        if (updateViewer) {
+            val key = exploredPartsKey(model.id)
+            val explored = preferences().getStringSet(key, emptySet()).orEmpty().toMutableSet()
+            if (explored.add(part.id)) {
+                preferences().edit().putStringSet(key, explored).apply()
+            }
+        }
         binding.featureNumber.text = (index + 1).toString()
         binding.featureTitle.text = part.title
         setGlossaryText(binding.featureDescription, partDescriptionForLevel(part))
@@ -1958,6 +2085,173 @@ class FirstFragment : Fragment() {
                 )
             }
         }
+    }
+
+    private fun showPartsPanel() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val dialog = BottomSheetDialog(requireContext())
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16.dp, 14.dp, 16.dp, 20.dp)
+            background = requireContext().getDrawable(R.drawable.bg_surface_panel)
+        }
+        content.addView(createWorkflowText("PARTS", 12f, readyTextColor, true))
+        content.addView(createWorkflowText(model.title, 23f, Color.WHITE, true, 4))
+        val search = EditText(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                48.dp
+            ).apply { topMargin = 12.dp }
+            background = requireContext().getDrawable(R.drawable.bg_search_field)
+            hint = "Search model parts"
+            setHintTextColor(Color.parseColor("#7F91AB"))
+            setTextColor(Color.WHITE)
+            setSingleLine()
+            setPadding(14.dp, 0, 14.dp, 0)
+        }
+        content.addView(search)
+        val rows = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val scroller = android.widget.ScrollView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                460.dp
+            ).apply { topMargin = 10.dp }
+            addView(rows)
+        }
+        content.addView(scroller)
+
+        fun render(query: String) {
+            rows.removeAllViews()
+            val matches = model.parts.withIndex().filter {
+                query.isBlank() ||
+                    it.value.title.contains(query, ignoreCase = true) ||
+                    it.value.scientificName.orEmpty().contains(query, ignoreCase = true)
+            }
+            val groups = matches.groupBy { it.value.parentPartId ?: "OTHER" }
+            groups.forEach { (groupId, entries) ->
+                rows.addView(
+                    createWorkflowText(
+                        when (groupId) {
+                            "CELL_ENVELOPE" -> "Cell Envelope"
+                            "CYTOPLASM" -> "Cytoplasm"
+                            "EXTERNAL_STRUCTURES" -> "External Structures"
+                            else -> if (groups.size == 1) "Structures" else "Other Structures"
+                        },
+                        13f,
+                        selectedTextColor,
+                        true,
+                        10
+                    )
+                )
+                entries.forEach { indexed ->
+                    rows.addView(
+                        createSheetAction(indexed.value.title, true) {
+                            selectPart(indexed.index, updateViewer = true)
+                            dialog.dismiss()
+                            showPartBottomSheet()
+                        }.apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                50.dp
+                            ).apply { topMargin = 6.dp }
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(14.dp, 0, 14.dp, 0)
+                            contentDescription =
+                                "${indexed.value.title}. Focus this structure in 3D."
+                        }
+                    )
+                }
+            }
+            if (matches.isEmpty()) {
+                rows.addView(
+                    createWorkflowText("No matching parts.", 15f, inactiveTextColor, false, 18)
+                )
+            }
+        }
+        search.doAfterTextChanged { render(it?.toString().orEmpty()) }
+        render("")
+        dialog.setContentView(content)
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            isDraggable = true
+            skipCollapsed = false
+            peekHeight = 360.dp
+        }
+        dialog.show()
+    }
+
+    private fun showAskAiPanel() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val part = model.parts.getOrNull(selectedPartIndex)
+        val dialog = BottomSheetDialog(requireContext())
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18.dp, 16.dp, 18.dp, 24.dp)
+            background = requireContext().getDrawable(R.drawable.bg_surface_panel)
+        }
+        content.addView(createWorkflowText("ASK AI", 12f, readyTextColor, true))
+        content.addView(
+            createWorkflowText(
+                part?.let { "${model.title}  |  ${it.title}" } ?: model.title,
+                21f,
+                Color.WHITE,
+                true,
+                5
+            )
+        )
+        val response = createGlossaryWorkflowText(
+            "Ask about structure, function, or how this model compares with another organism.",
+            14f,
+            bodyTextColor,
+            10
+        )
+        val input = EditText(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                92.dp
+            ).apply { topMargin = 14.dp }
+            background = requireContext().getDrawable(R.drawable.bg_search_field)
+            hint = "What would you like to understand?"
+            setHintTextColor(Color.parseColor("#7F91AB"))
+            setTextColor(Color.WHITE)
+            gravity = Gravity.TOP or Gravity.START
+            setPadding(14.dp, 12.dp, 14.dp, 12.dp)
+        }
+        content.addView(input)
+        content.addView(
+            createWorkflowAction("Ask", primary = true, topMargin = 10) {
+                val question = input.text.toString().trim()
+                if (question.isBlank()) {
+                    input.error = "Enter a biology question"
+                } else {
+                    val answer = when {
+                        question.contains("function", true) && part != null ->
+                            "${part.title}: ${partDescriptionForLevel(part)}"
+                        question.contains("compare", true) ->
+                            "${model.title} is a ${model.categoryId.lowercase()} model. Use Compare in the model briefing to place its structures beside another model."
+                        part != null ->
+                            "${part.title} is one of ${model.parts.size} identified structures in ${model.title}. ${partDescriptionForLevel(part)}"
+                        else -> overviewForLevel(model)
+                    }
+                    setGlossaryText(
+                        response,
+                        "$answer\n\nThis on-device answer uses the reviewed lesson content. A remote AI provider is not configured."
+                    )
+                    response.announceForAccessibility("Answer ready. $answer")
+                }
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    48.dp
+                ).apply { topMargin = 10.dp }
+            }
+        )
+        content.addView(response)
+        dialog.setContentView(content)
+        dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        dialog.show()
     }
 
     private fun showPartBottomSheet() {
@@ -2048,9 +2342,35 @@ class FirstFragment : Fragment() {
         content.addView(showAllSwitch)
         content.addView(identifySwitch)
 
+        val learningActions = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        learningActions.addView(
+            createSheetAction("Ask AI", true) {
+                dialog.dismiss()
+                showAskAiPanel()
+            }
+        )
+        learningActions.addView(
+            createSheetAction("Quiz me", true) {
+                dialog.dismiss()
+                setLearningMode(ExplorerMode.QUIZ)
+                startQuizSession()
+                renderActiveWorkflow()
+            }
+        )
+        learningActions.addView(
+            createSheetAction("Add note", true) {
+                addPartNote(model, part)
+            }
+        )
+        content.addView(learningActions)
+
         val actions = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+            setPadding(0, 8.dp, 0, 0)
         }
         actions.addView(
             createSheetAction("Previous", selectedPartIndex > 0) {
@@ -2101,6 +2421,36 @@ class FirstFragment : Fragment() {
         }
         partBottomSheet = dialog
         dialog.show()
+    }
+
+    private fun addPartNote(model: BiologyModel, part: ModelPart) {
+        val input = EditText(requireContext()).apply {
+            hint = "What do you want to remember?"
+            minLines = 3
+            maxLines = 6
+            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Note about ${part.title}")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                val note = input.text.toString().trim()
+                if (note.isBlank()) return@setPositiveButton
+                val key = notesKey(selectedModelIndex)
+                val existing = preferences().getString(key, "").orEmpty().trim()
+                val timestamp = SimpleDateFormat(
+                    "dd MMM yyyy, h:mm a",
+                    Locale.getDefault()
+                ).format(Date())
+                val entry = "[$timestamp] ${part.title} (${model.id}/${part.id})\n$note"
+                preferences().edit()
+                    .putString(key, listOf(existing, entry).filter(String::isNotBlank).joinToString("\n\n"))
+                    .apply()
+                Toast.makeText(requireContext(), "Part note saved", Toast.LENGTH_SHORT).show()
+                binding.root.announceForAccessibility("Note saved for ${part.title}")
+            }
+            .show()
     }
 
     private fun restoreIdentificationSettings() {
@@ -2157,13 +2507,12 @@ class FirstFragment : Fragment() {
             }
         }.toString()
 
-        val source = when {
-            storedModel != null ->
+        val source =
+            if (storedModel != null || bundled) {
                 "https://$MODEL_HOST/models/${Uri.encode(model.fileName)}"
-            bundled ->
-                "biology/3d/${Uri.encode(model.fileName)}"
-            else -> null
-        }
+            } else {
+                null
+            }
 
         binding.viewerStatusOverlay.visibility = View.VISIBLE
         binding.viewerStatusOverlay.bringToFront()
@@ -2263,11 +2612,34 @@ class FirstFragment : Fragment() {
             activity?.runOnUiThread {
                 if (_binding == null) return@runOnUiThread
                 when (state) {
-                    "loaded" -> binding.viewerStatusOverlay.visibility = View.GONE
-                    "error" -> showViewerError(
-                        detail.ifBlank { "The 3D model could not be opened." }
-                    )
+                    "loaded" -> {
+                        binding.viewerStatusText.text = "Ready"
+                        binding.modelProgress.visibility = View.GONE
+                        binding.viewerStatusOverlay.postDelayed({
+                            if (_binding != null) binding.viewerStatusOverlay.visibility = View.GONE
+                        }, 450L)
+                        binding.root.announceForAccessibility(
+                            "${MODEL_CATALOG[selectedModelIndex].title} model loaded"
+                        )
+                    }
+                    "error" -> {
+                        val message = detail.ifBlank { "The 3D model could not be opened." }
+                        showViewerError(message)
+                        binding.root.announceForAccessibility("Model loading failed. $message")
+                    }
                 }
+            }
+        }
+
+        @JavascriptInterface
+        fun onLoadingStage(stage: String, progress: Int) {
+            activity?.runOnUiThread {
+                if (_binding == null) return@runOnUiThread
+                binding.viewerStatusOverlay.visibility = View.VISIBLE
+                binding.modelProgress.visibility = View.VISIBLE
+                binding.viewerStatusActions.visibility = View.GONE
+                binding.viewerStatusText.text =
+                    if (progress in 1..99) "$stage  $progress%" else stage
             }
         }
 
@@ -2276,7 +2648,9 @@ class FirstFragment : Fragment() {
             activity?.runOnUiThread {
                 if (_binding == null) return@runOnUiThread
                 updateZoomControls(zoomPercent.coerceIn(MIN_ZOOM_PERCENT, MAX_ZOOM_PERCENT))
-                binding.orientationIndicator.text = orientation.uppercase()
+                binding.orientationIndicator.text = orientation
+                binding.orientationIndicator.contentDescription =
+                    "$orientation orientation. Tap to choose another orientation."
             }
         }
 
@@ -2365,7 +2739,14 @@ class FirstFragment : Fragment() {
             CameraPreset("front", "FR", "Front"),
             CameraPreset("right", "RT", "Right"),
             CameraPreset("back", "BK", "Back"),
-            CameraPreset("top", "TOP", "Top")
+            CameraPreset("left", "LT", "Left"),
+            CameraPreset("top", "TOP", "Top"),
+            CameraPreset("bottom", "BTM", "Bottom")
+        )
+        val STARTER_MODEL_FILES = setOf(
+            "Bacteriacell.glb",
+            "Neuron.glb",
+            "Vacuole.glb"
         )
         val MODEL_OVERVIEWS = mapOf(
             "Bacteriacell.glb" to
@@ -2509,10 +2890,73 @@ class FirstFragment : Fragment() {
             description: String,
             position: String,
             normal: String = "0 0 1"
-        ) = AnatomyPart(title, description, position, normal)
+        ): AnatomyPart {
+            val semanticId = title.uppercase()
+                .replace(Regex("[^A-Z0-9]+"), "_")
+                .trim('_')
+            return ModelPart(
+                id = semanticId,
+                nodeNames = listOf(title, semanticId, "BIO_$semanticId"),
+                title = title,
+                shortDescription = description,
+                detailedDescription = description,
+                parentPartId = when (semanticId) {
+                    "CAPSULE", "CELL_WALL", "CELL_MEMBRANE" -> "CELL_ENVELOPE"
+                    "RIBOSOMES", "NUCLEOID" -> "CYTOPLASM"
+                    "FLAGELLUM", "PILI" -> "EXTERNAL_STRUCTURES"
+                    else -> null
+                },
+                position = position,
+                normal = normal,
+                hitNodeNames = listOf("HIT_$semanticId")
+            )
+        }
+
+        fun model(
+            fileName: String,
+            title: String,
+            shortTitle: String,
+            badge: String,
+            parts: List<AnatomyPart>
+        ): BiologyModel {
+            val metadata = MODEL_METADATA[fileName]
+            val category = when (fileName) {
+                "Bacteriacell.glb" -> BiologyCategories.MICROBIOLOGY
+                "PlantCell.glb" -> BiologyCategories.CELLS
+                "Chloroplast.glb",
+                "plant cell wall.glb",
+                "Vacuole.glb" -> BiologyCategories.PLANTS
+                "Neuron.glb",
+                "WhiteBloodCell.glb",
+                "epithelial microvilli.glb" -> BiologyCategories.HUMAN_BODY
+                else -> BiologyCategories.ORGANELLES
+            }
+            return BiologyModel(
+                fileName = fileName,
+                title = title,
+                shortTitle = shortTitle,
+                badge = badge,
+                parts = parts,
+                alternativeNames = listOf(shortTitle, metadata?.commonName.orEmpty())
+                    .filter(String::isNotBlank)
+                    .distinct(),
+                scientificName = metadata?.scientificName,
+                description = MODEL_OVERVIEWS[fileName].orEmpty(),
+                categoryId = category,
+                tags = (title.split(" ") + category + "3D").distinct(),
+                system = when (category) {
+                    BiologyCategories.HUMAN_BODY -> "Human body"
+                    BiologyCategories.PLANTS -> "Plant biology"
+                    BiologyCategories.MICROBIOLOGY -> "Microbiology"
+                    else -> "Cell biology"
+                },
+                supportsAr = false,
+                supportsPartSelection = parts.isNotEmpty()
+            )
+        }
 
         val MODEL_CATALOG = listOf(
-            BiologyModel(
+            model(
                 "Bacteriacell.glb", "Bacteria Cell", "Bacteria", "BC",
                 listOf(
                     part("Capsule", "The outer capsule helps some bacteria adhere to surfaces and resist drying.", "-0.72 0.04 0.31"),
@@ -2523,7 +2967,7 @@ class FirstFragment : Fragment() {
                     part("Flagellum", "The flagellum rotates to propel a motile bacterium.", "0.88 0.01 0.08", "1 0 0")
                 )
             ),
-            BiologyModel(
+            model(
                 "Cell Membrane.glb", "Cell Membrane", "Membrane", "CM",
                 listOf(
                     part("Phospholipid heads", "Water-attracting heads face the fluid inside and outside the cell.", "-0.55 0.10 0.78"),
@@ -2532,7 +2976,7 @@ class FirstFragment : Fragment() {
                     part("Glycoprotein", "Carbohydrate-tagged proteins support recognition and cell signaling.", "0.62 0.13 0.62")
                 )
             ),
-            BiologyModel(
+            model(
                 "Chloroplast.glb", "Chloroplast", "Chloroplast", "CH",
                 listOf(
                     part("Outer membrane", "The outer membrane forms the chloroplast's external boundary.", "-0.64 0.18 0.55"),
@@ -2541,7 +2985,7 @@ class FirstFragment : Fragment() {
                     part("Stroma lamella", "Lamellae connect grana and organize the thylakoid membrane system.", "0.57 -0.08 0.50")
                 )
             ),
-            BiologyModel(
+            model(
                 "epithelial microvilli.glb", "Epithelial Microvilli", "Microvilli", "MV",
                 listOf(
                     part("Microvilli", "Finger-like projections increase the surface area available for absorption.", "-0.45 0.30 0.78"),
@@ -2550,7 +2994,7 @@ class FirstFragment : Fragment() {
                     part("Cell surface", "The apical membrane faces the lumen or external environment.", "0.62 -0.25 0.55")
                 )
             ),
-            BiologyModel(
+            model(
                 "Lysosome.glb", "Lysosome", "Lysosome", "LY",
                 listOf(
                     part("Lysosomal membrane", "A single membrane isolates powerful digestive enzymes from the cytoplasm.", "-0.57 0.22 0.72"),
@@ -2558,7 +3002,7 @@ class FirstFragment : Fragment() {
                     part("Hydrolytic enzymes", "Enzymes break proteins, lipids, nucleic acids, and carbohydrates into reusable units.", "0.42 -0.15 0.78")
                 )
             ),
-            BiologyModel(
+            model(
                 "Mitochondrion.glb", "Mitochondrion", "Mitochondrion", "MT",
                 listOf(
                     part("Outer membrane", "The smooth outer membrane encloses the organelle.", "-0.67 0.08 0.38"),
@@ -2567,7 +3011,7 @@ class FirstFragment : Fragment() {
                     part("Matrix", "The matrix contains enzymes for the citric acid cycle and mitochondrial DNA.", "0.48 -0.04 0.38")
                 )
             ),
-            BiologyModel(
+            model(
                 "Neuron.glb", "Neuron", "Neuron", "NE",
                 listOf(
                     part("Dendrites", "Dendrites receive signals from other neurons.", "-0.73 0.05 0.56"),
@@ -2576,7 +3020,7 @@ class FirstFragment : Fragment() {
                     part("Axon terminals", "Terminals release neurotransmitters to communicate with target cells.", "0.76 -0.03 0.48")
                 )
             ),
-            BiologyModel(
+            model(
                 "plant cell wall.glb", "Plant Cell Wall", "Cell Wall", "CW",
                 listOf(
                     part("Primary wall", "A flexible cellulose-rich wall permits growth while providing support.", "-0.59 0.20 0.62"),
@@ -2585,7 +3029,7 @@ class FirstFragment : Fragment() {
                     part("Plasmodesmata", "Microscopic channels connect the cytoplasm of neighboring plant cells.", "0.62 -0.18 0.48")
                 )
             ),
-            BiologyModel(
+            model(
                 "PlantCell.glb", "Plant Cell", "Plant Cell", "PC",
                 listOf(
                     part("Cell wall", "The rigid cellulose wall supports and protects the plant cell.", "-0.68 0.11 0.66"),
@@ -2596,7 +3040,7 @@ class FirstFragment : Fragment() {
                     part("Mitochondrion", "Mitochondria release usable energy from nutrients.", "0.67 -0.10 0.56")
                 )
             ),
-            BiologyModel(
+            model(
                 "Ribosomes.glb", "Ribosomes", "Ribosomes", "RB",
                 listOf(
                     part("Large subunit", "The large subunit catalyzes peptide-bond formation.", "-0.40 0.18 0.78"),
@@ -2604,7 +3048,7 @@ class FirstFragment : Fragment() {
                     part("mRNA channel", "Messenger RNA passes between the subunits during translation.", "0.48 -0.16 0.72")
                 )
             ),
-            BiologyModel(
+            model(
                 "Rough Endoplasmic Reticulum.glb", "Rough Endoplasmic Reticulum", "Rough ER", "ER",
                 listOf(
                     part("Cisternae", "Flattened membrane sacs create spaces for protein folding and processing.", "-0.55 0.20 0.66"),
@@ -2613,7 +3057,7 @@ class FirstFragment : Fragment() {
                     part("Transport vesicle", "Vesicles carry processed proteins from the ER toward the Golgi apparatus.", "0.63 -0.18 0.56")
                 )
             ),
-            BiologyModel(
+            model(
                 "Smooth Endoplasmic Reticulum.glb", "Smooth Endoplasmic Reticulum", "Smooth ER", "SE",
                 listOf(
                     part("Tubule network", "Interconnected membrane tubules provide a large reaction surface.", "-0.50 0.32 0.72"),
@@ -2621,7 +3065,7 @@ class FirstFragment : Fragment() {
                     part("ER lumen", "The interior stores calcium ions and transports newly made molecules.", "0.48 -0.25 0.68")
                 )
             ),
-            BiologyModel(
+            model(
                 "Vacuole.glb", "Vacuole", "Vacuole", "VA",
                 listOf(
                     part("Tonoplast", "The tonoplast is the vacuole's selective surrounding membrane.", "-0.52 0.20 0.56"),
@@ -2629,7 +3073,7 @@ class FirstFragment : Fragment() {
                     part("Transport proteins", "Tonoplast proteins control movement between the vacuole and cytoplasm.", "0.50 -0.18 0.53")
                 )
             ),
-            BiologyModel(
+            model(
                 "WhiteBloodCell.glb", "White Blood Cell", "White Blood Cell", "WB",
                 listOf(
                     part("Cell membrane", "A flexible membrane lets the cell change shape and move through tissues.", "-0.57 0.18 0.76"),
@@ -2638,24 +3082,9 @@ class FirstFragment : Fragment() {
                     part("Granules", "In granulocytes, enzyme-filled granules help destroy pathogens.", "0.62 -0.22 0.64")
                 )
             )
-        )
+        ).filter { it.fileName in STARTER_MODEL_FILES }
     }
 }
-
-private data class BiologyModel(
-    val fileName: String,
-    val title: String,
-    val shortTitle: String,
-    val badge: String,
-    val parts: List<AnatomyPart>
-)
-
-private data class AnatomyPart(
-    val title: String,
-    val description: String,
-    val position: String,
-    val normal: String
-)
 
 private data class ModelMetadata(
     val commonName: String,
@@ -2663,12 +3092,6 @@ private data class ModelMetadata(
     val pronunciation: String,
     val sourceTitle: String,
     val sourceUrl: String
-)
-
-private data class CameraPreset(
-    val key: String,
-    val shortLabel: String,
-    val title: String
 )
 
 private data class QuizQuestion(

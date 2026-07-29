@@ -188,6 +188,7 @@
     let lastCameraUpdate = 0;
     let pointerStart = null;
     let lastTapAt = 0;
+    let pendingTap = null;
     let selectedPartIndex = -1;
 
     applyAccessibilityClasses();
@@ -223,6 +224,18 @@
         requestAnimationFrame(() => {
             requestAnimationFrame(resolveSurfaceAnchors);
         });
+    });
+
+    viewer.addEventListener("progress", event => {
+        const progress = Number(event.detail && event.detail.totalProgress || 0);
+        const stage =
+            progress < 0.2 ? "Preparing 3D model" :
+            progress < 0.85 ? "Loading textures" :
+            "Preparing 3D model";
+        message.textContent = stage;
+        if (window.BiologyBridge) {
+            window.BiologyBridge.onLoadingStage(stage, Math.round(progress * 100));
+        }
     });
 
     viewer.addEventListener("camera-change", () => {
@@ -429,7 +442,9 @@
             front: `0deg 72deg ${radius}m`,
             right: `90deg 72deg ${radius}m`,
             back: `180deg 72deg ${radius}m`,
-            top: `0deg 12deg ${radius}m`
+            left: `270deg 72deg ${radius}m`,
+            top: `0deg 12deg ${radius}m`,
+            bottom: `0deg 168deg ${radius}m`
         };
         viewer.cameraTarget = "auto auto auto";
         viewer.cameraOrbit = cameraViews[preset] || cameraViews.front;
@@ -464,7 +479,10 @@
         const zoom = Math.max(35, Math.min(300, Math.round(initialCameraRadius / orbit.radius * 100)));
         const degrees = ((orbit.theta * 180 / Math.PI) % 360 + 360) % 360;
         let orientation = "Front";
-        if (degrees >= 45 && degrees < 135) orientation = "Right";
+        const phiDegrees = orbit.phi * 180 / Math.PI;
+        if (phiDegrees < 35) orientation = "Top";
+        else if (phiDegrees > 145) orientation = "Bottom";
+        else if (degrees >= 45 && degrees < 135) orientation = "Right";
         else if (degrees >= 135 && degrees < 225) orientation = "Back";
         else if (degrees >= 225 && degrees < 315) orientation = "Left";
         window.BiologyBridge.onCameraState(zoom, orientation);
@@ -591,13 +609,44 @@
 
         const now = Date.now();
         if (now - lastTapAt < 330) {
+            if (pendingTap) clearTimeout(pendingTap);
+            pendingTap = null;
             focusFromPoint(event.clientX, event.clientY);
             lastTapAt = 0;
         } else {
             lastTapAt = now;
+            const tapX = event.clientX;
+            const tapY = event.clientY;
+            pendingTap = setTimeout(() => {
+                identifyPartFromPoint(tapX, tapY);
+                pendingTap = null;
+            }, 260);
             if (window.BiologyBridge) window.BiologyBridge.onViewerTapped();
         }
     });
+
+    function identifyPartFromPoint(x, y) {
+        if (!parts.length) return;
+        const localX = x - viewer.getBoundingClientRect().left;
+        const localY = y - viewer.getBoundingClientRect().top;
+        let closest = null;
+        viewer.querySelectorAll(".hotspot[data-visible]").forEach((hotspot, index) => {
+            const data = viewer.queryHotspot(hotspot.slot);
+            if (!data || !data.facingCamera) return;
+            const distance = Math.hypot(
+                data.canvasPosition.x - localX,
+                data.canvasPosition.y - localY
+            );
+            if (!closest || distance < closest.distance) {
+                closest = { index, distance };
+            }
+        });
+        if (!closest || closest.distance > 96) return;
+        focusPart(closest.index);
+        if (window.BiologyBridge) {
+            window.BiologyBridge.onPartSelected(closest.index);
+        }
+    }
 
     function focusFromPoint(x, y) {
         const hit = viewer.positionAndNormalFromPoint(x, y);

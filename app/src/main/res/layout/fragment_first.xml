@@ -171,7 +171,7 @@
             <FrameLayout
                 android:id="@+id/viewerContainer"
                 android:layout_width="match_parent"
-                android:layout_height="500dp"
+                android:layout_height="@dimen/biology_viewer_height"
                 android:background="@drawable/bg_surface_panel">
 
                 <WebView
@@ -183,36 +183,37 @@
 
                 <LinearLayout
                     android:id="@+id/viewerStatusOverlay"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="#EE031326"
-                    android:gravity="center"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|start"
+                    android:layout_margin="12dp"
+                    android:background="@drawable/bg_control_bar"
+                    android:gravity="center_vertical"
                     android:orientation="vertical"
-                    android:padding="32dp"
+                    android:padding="12dp"
                     android:visibility="gone">
 
                     <ProgressBar
                         android:id="@+id/modelProgress"
-                        style="?android:attr/progressBarStyleLarge"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
                         android:indeterminateTint="#55E7D0" />
 
                     <TextView
                         android:id="@+id/viewerStatusText"
-                        android:layout_width="match_parent"
+                        android:layout_width="240dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
+                        android:layout_marginTop="8dp"
                         android:gravity="center"
                         android:text="Preparing 3D model…"
                         android:textColor="#DCEAFF"
-                        android:textSize="15sp" />
+                        android:textSize="12sp" />
 
                     <LinearLayout
                         android:id="@+id/viewerStatusActions"
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
-                        android:layout_marginTop="18dp"
+                        android:layout_marginTop="10dp"
                         android:gravity="center"
                         android:orientation="horizontal"
                         android:visibility="gone">
@@ -243,34 +244,37 @@
 
                 <TextView
                     android:id="@+id/orientationIndicator"
-                    android:layout_width="58dp"
-                    android:layout_height="58dp"
+                    android:layout_width="76dp"
+                    android:layout_height="48dp"
                     android:layout_gravity="top|end"
                     android:layout_marginTop="12dp"
                     android:layout_marginEnd="12dp"
                     android:background="@drawable/bg_orientation_indicator"
+                    android:contentDescription="Choose camera orientation"
                     android:gravity="center"
-                    android:text="FRONT"
+                    android:text="Front"
                     android:textColor="#DCEAFF"
-                    android:textSize="10sp"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    android:tooltipText="Current model orientation" />
+                    android:tooltipText="Choose camera orientation" />
 
                 <LinearLayout
                     android:id="@+id/zoomControls"
-                    android:layout_width="50dp"
+                    android:layout_width="56dp"
                     android:layout_height="wrap_content"
                     android:layout_gravity="end|center_vertical"
                     android:layout_marginEnd="12dp"
-                    android:background="@drawable/bg_control_bar"
                     android:gravity="center"
                     android:orientation="vertical"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp">
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp">
 
                     <TextView
                         android:id="@+id/zoomInButton"
                         style="@style/BiologyViewerControl"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_floating_circle"
                         android:contentDescription="Zoom in"
                         android:text="+"
                         android:tooltipText="Zoom in" />
@@ -278,15 +282,19 @@
                     <TextView
                         android:id="@+id/zoomLevel"
                         android:layout_width="match_parent"
-                        android:layout_height="30dp"
+                        android:layout_height="8dp"
                         android:gravity="center"
-                        android:text="100%"
+                        android:text=""
                         android:textColor="#9FB3CF"
-                        android:textSize="10sp" />
+                        android:textSize="1sp"
+                        android:visibility="invisible" />
 
                     <TextView
                         android:id="@+id/zoomOutButton"
                         style="@style/BiologyViewerControl"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_floating_circle"
                         android:contentDescription="Zoom out"
                         android:text="−"
                         android:tooltipText="Zoom out" />
@@ -315,23 +323,29 @@
                         <TextView
                             android:id="@+id/rotateLeftButton"
                             style="@style/BiologyViewerControl"
-                            android:contentDescription="Rotate left"
-                            android:text="↶"
-                            android:tooltipText="Rotate left" />
+                            android:contentDescription="Reset model view"
+                            android:text="R"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:tooltipText="Reset" />
 
                         <TextView
                             android:id="@+id/rotationButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Pause automatic rotation"
-                            android:text="Ⅱ"
+                            android:text="II"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
                             android:tooltipText="Pause automatic rotation" />
 
                         <TextView
                             android:id="@+id/rotateRightButton"
                             style="@style/BiologyViewerControl"
-                            android:contentDescription="Rotate right"
-                            android:text="↷"
-                            android:tooltipText="Rotate right" />
+                            android:contentDescription="Open model parts"
+                            android:text="P"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:tooltipText="Parts" />
 
                         <TextView
                             android:id="@+id/rotationSpeedButton"
@@ -345,27 +359,57 @@
                         <TextView
                             android:id="@+id/cameraViewButton"
                             style="@style/BiologyViewerControl"
-                            android:contentDescription="Change camera view"
-                            android:text="FR"
-                            android:textSize="11sp"
+                            android:contentDescription="Exploded model view"
+                            android:text="EX"
+                            android:textSize="10sp"
                             android:textStyle="bold"
-                            android:tooltipText="Camera view" />
+                            android:tooltipText="Explode"
+                            android:visibility="gone" />
 
                         <TextView
                             android:id="@+id/resetViewButton"
                             style="@style/BiologyViewerControl"
-                            android:contentDescription="Reset view"
-                            android:text="⌂"
-                            android:tooltipText="Reset view" />
+                            android:contentDescription="Section model view"
+                            android:text="SEC"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:tooltipText="Section"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/arButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Open augmented reality"
+                            android:text="AR"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:tooltipText="Augmented reality"
+                            android:visibility="gone" />
 
                         <TextView
                             android:id="@+id/fullScreenButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Open full screen"
-                            android:text="⛶"
+                            android:text="[]"
+                            android:textSize="12sp"
                             android:tooltipText="Open full screen" />
                     </LinearLayout>
                 </HorizontalScrollView>
+
+                <TextView
+                    android:id="@+id/askAiButton"
+                    android:layout_width="88dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_marginEnd="12dp"
+                    android:layout_marginBottom="78dp"
+                    android:background="@drawable/bg_filter_chip_selected"
+                    android:contentDescription="Ask AI about this model"
+                    android:gravity="center"
+                    android:text="Ask AI"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
                 <LinearLayout
                     android:id="@+id/fullScreenTopBar"
