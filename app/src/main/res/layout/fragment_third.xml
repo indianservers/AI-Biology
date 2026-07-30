@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_biology_screen"
+    tools:context=".ThirdFragment">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/microscopyTopBar"
+        android:layout_width="0dp"
+        android:layout_height="82dp"
+        android:background="#F2051427"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/microscopyBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Back to 3D explorer"
+            android:gravity="center"
+            android:text="&lt;"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/microscopyTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Virtual Microscopy"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toTopOf="@id/microscopySubtitle"
+            app:layout_constraintEnd_toStartOf="@id/microscopyRefresh"
+            app:layout_constraintStart_toEndOf="@id/microscopyBack"
+            app:layout_constraintTop_toTopOf="@id/microscopyBack" />
+
+        <TextView
+            android:id="@+id/microscopySubtitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Explore tissue. Identify structures."
+            android:textColor="#73E8C5"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="@id/microscopyBack"
+            app:layout_constraintEnd_toStartOf="@id/microscopyRefresh"
+            app:layout_constraintStart_toEndOf="@id/microscopyBack"
+            app:layout_constraintTop_toBottomOf="@id/microscopyTitle" />
+
+        <ImageButton
+            android:id="@+id/microscopyRefresh"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Refresh microscopy catalogue"
+            android:padding="11dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:tint="#FFFFFF"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/microscopyWorkspace"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/microscopyTopBar">
+
+        <LinearLayout
+            android:id="@+id/slideRail"
+            android:layout_width="match_parent"
+            android:layout_height="154dp"
+            android:background="#C908172B"
+            android:orientation="vertical"
+            android:paddingStart="10dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Tissue slides"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/slideCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#8FA6C5"
+                    android:textSize="11sp"
+                    tools:text="4 slides" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/slideList"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:contentDescription="Microscopy tissue slides"
+                android:orientation="horizontal"
+                android:paddingEnd="10dp"
+                tools:listitem="@layout/item_microscopy_slide" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/microscopyViewerPane"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_stage_card">
+
+            <WebView
+                android:id="@+id/microscopyWebView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Zoomable tissue slide viewer"
+                android:focusable="true"
+                android:importantForAccessibility="yes" />
+
+            <LinearLayout
+                android:id="@+id/slideInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="12dp"
+                android:background="@drawable/bg_info_panel"
+                android:orientation="vertical"
+                android:paddingStart="12dp"
+                android:paddingTop="9dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="9dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/selectedSlideTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="250dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    tools:text="Kidney cortex" />
+
+                <TextView
+                    android:id="@+id/selectedSlideMeta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:maxWidth="250dp"
+                    android:textColor="#73E8C5"
+                    android:textSize="11sp"
+                    tools:text="H&amp;E · 100x" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/microscopyControls"
+                android:layout_width="52dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|end"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_control_rail"
+                android:orientation="vertical"
+                android:padding="4dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/zoomIn"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Zoom in"
+                    android:gravity="center"
+                    android:text="+"
+                    android:textColor="#FFFFFF"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/zoomOut"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Zoom out"
+                    android:gravity="center"
+                    android:text="−"
+                    android:textColor="#FFFFFF"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/resetSlide"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Fit slide to screen"
+                    android:padding="11dp"
+                    android:src="@android:drawable/ic_menu_revert"
+                    android:tint="#FFFFFF" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/viewerEmptyState"
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="22dp">
+
+                <ProgressBar
+                    android:id="@+id/microscopyLoading"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:indeterminateTint="#73E8C5" />
+
+                <TextView
+                    android:id="@+id/microscopyEmptyTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center"
+                    android:text="Loading virtual lab"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/microscopyEmptyMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="3dp"
+                    android:text="Checking the tissue slide catalogue."
+                    android:textColor="#8FA6C5"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/microscopyActionBar"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_gravity="bottom"
+                android:background="#EA071426"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/toggleLabels"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_filter_chip_selected"
+                    android:contentDescription="Toggle structure labels"
+                    android:gravity="center"
+                    android:text="Labels on"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/startChallenge"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1.5"
+                    android:background="@drawable/bg_quiz_button"
+                    android:contentDescription="Start identification challenge"
+                    android:gravity="center"
+                    android:text="Identify structures"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/challengeProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="9dp"
+                    android:gravity="center"
+                    android:minWidth="70dp"
+                    android:textColor="#8FA6C5"
+                    android:textSize="11sp"
+                    tools:text="Best 3/4" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/challengePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_info_panel"
+                android:orientation="vertical"
+                android:padding="14dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/challengeEyebrow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="IDENTIFY 1 OF 4"
+                    android:textColor="#73E8C5"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/challengePrompt"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    tools:text="Find the glomerulus" />
+
+                <TextView
+                    android:id="@+id/challengeFeedback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:textColor="#AAB9CE"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    tools:text="Correct. This round capillary network filters blood." />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="9dp"
+                    android:gravity="end"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/endChallenge"
+                        android:layout_width="88dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_filter_chip"
+                        android:gravity="center"
+                        android:text="End"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/nextChallenge"
+                        android:layout_width="112dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_filter_chip_selected"
+                        android:enabled="false"
+                        android:gravity="center"
+                        android:text="Next"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

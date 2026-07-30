@@ -56,6 +56,23 @@
             android:textSize="11sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/microscopyButton"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/microscopyButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Open virtual microscopy"
+            android:gravity="center"
+            android:text="MIC"
+            android:textColor="#73E8C5"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:tooltipText="Virtual microscopy"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/libraryButton"
             app:layout_constraintTop_toTopOf="parent" />
 

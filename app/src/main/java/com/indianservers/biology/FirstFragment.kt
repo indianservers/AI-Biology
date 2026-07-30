@@ -163,6 +163,9 @@ class FirstFragment : Fragment() {
         binding.libraryButton.setOnClickListener {
             findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment)
         }
+        binding.microscopyButton.setOnClickListener {
+            findNavController().navigate(R.id.action_FirstFragment_to_ThirdFragment)
+        }
         configureExpanders()
         configureBiologyExperience()
         configureAccessibility()
@@ -970,6 +973,7 @@ class FirstFragment : Fragment() {
         ).forEach { it.textSize = 16f }
 
         listOf(
+            binding.microscopyButton,
             binding.libraryButton,
             binding.accessibilityButton,
             binding.exploreTab,

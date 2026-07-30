@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-30T00:00:00Z",
+  "slides": [
+    {
+      "id": "KIDNEY_CORTEX_HE_01",
+      "title": "Kidney Cortex",
+      "summary": "A renal cortex section showing glomeruli and surrounding tubules.",
+      "category": "Human Histology",
+      "tissue": "Renal cortex",
+      "organ": "Kidney",
+      "species": "Human",
+      "scientificName": "Ren",
+      "stain": "H&E",
+      "magnification": "100x",
+      "thumbnailPath": "kidney-cortex/thumbnail.webp",
+      "source": {
+        "type": "iiif",
+        "path": "kidney-cortex/info.json",
+        "width": 12000,
+        "height": 8000
+      },
+      "annotations": [
+        {
+          "id": "GLOMERULUS_01",
+          "label": "Glomerulus",
+          "scientificName": "Glomerulus renalis",
+          "description": "A capillary tuft where blood filtration begins.",
+          "challengePrompt": "Find the glomerulus",
+          "x": 0.428,
+          "y": 0.361,
+          "radius": 0.045
+        }
+      ],
+      "attribution": {
+        "title": "AI Explorer Biology Content Team",
+        "url": "https://example.com/sources/kidney-cortex"
+      },
+      "reviewedAt": "2026-07-30"
+    }
+  ]
+}
