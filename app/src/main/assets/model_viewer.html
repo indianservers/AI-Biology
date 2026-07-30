@@ -227,6 +227,7 @@
     });
 
     viewer.addEventListener("progress", event => {
+        if (!src) return;
         const progress = Number(event.detail && event.detail.totalProgress || 0);
         const stage =
             progress < 0.2 ? "Preparing 3D model" :

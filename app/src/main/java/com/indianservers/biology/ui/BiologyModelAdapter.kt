@@ -20,6 +20,7 @@ class BiologyModelAdapter(
     private val isFavourite: (BiologyModel) -> Boolean,
     private val downloadRecord: (BiologyModel) -> ModelDownloadRecord?,
     private val thumbnailFile: (BiologyModel) -> File?,
+    private val requestThumbnail: (BiologyModel, (File?) -> Unit) -> Unit,
     private val onSelected: (BiologyModel) -> Unit,
     private val onFavourite: (BiologyModel) -> Unit
 ) : ListAdapter<BiologyModel, BiologyModelAdapter.ModelViewHolder>(DIFF) {
@@ -84,7 +85,19 @@ class BiologyModelAdapter(
             binding.modelThumbnail.setImageDrawable(null)
             binding.modelThumbnail.tag = model.id
             binding.modelPlaceholder.visibility = View.VISIBLE
-            val file = thumbnailFile(model)?.takeIf(File::isFile) ?: return
+            val file = thumbnailFile(model)?.takeIf(File::isFile)
+            if (file == null) {
+                requestThumbnail(model) { downloaded ->
+                    if (downloaded?.isFile == true && binding.modelThumbnail.tag == model.id) {
+                        decodeThumbnail(model, downloaded)
+                    }
+                }
+                return
+            }
+            decodeThumbnail(model, file)
+        }
+
+        private fun decodeThumbnail(model: BiologyModel, file: File) {
             THUMBNAIL_EXECUTOR.execute {
                 val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: return@execute
                 binding.modelThumbnail.post {
@@ -116,9 +129,13 @@ class BiologyModelAdapter(
             ModelDownloadStatus.UPDATE_AVAILABLE -> "UPDATE AVAILABLE"
             ModelDownloadStatus.FAILED -> "RETRY DOWNLOAD"
             ModelDownloadStatus.DOWNLOADED -> "DOWNLOADED"
-            else -> model.fileSizeBytes?.let {
+            else -> (model.packageSizeBytes ?: model.fileSizeBytes)?.let {
                 "${formatBytes(it)}  |  DOWNLOAD"
-            } ?: if (model.glbUrl.isNullOrBlank()) "ONLINE SOURCE PENDING" else "DOWNLOAD"
+            } ?: if (model.glbUrl.isNullOrBlank() && model.packageUrl.isNullOrBlank()) {
+                "ONLINE SOURCE PENDING"
+            } else {
+                "DOWNLOAD"
+            }
         }
     }
 
@@ -142,4 +159,3 @@ class BiologyModelAdapter(
             }
     }
 }
-

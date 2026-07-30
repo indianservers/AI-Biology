@@ -52,6 +52,7 @@ import com.indianservers.biology.data.BiologyModel
 import com.indianservers.biology.data.CameraPreset
 import com.indianservers.biology.data.ModelPart
 import com.indianservers.biology.data.ModelRepository
+import com.indianservers.biology.data.RemoteBiologyCatalogRepository
 import com.indianservers.biology.ui.ModelLibraryBottomSheet
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -71,11 +72,13 @@ class FirstFragment : Fragment() {
 
     private var _binding: FragmentFirstBinding? = null
     private val binding get() = _binding!!
+    private val MODEL_CATALOG = BUILT_IN_MODEL_CATALOG.toMutableList()
     private var selectedModelIndex = 0
     private var selectedPartIndex = 0
     private var isAutoRotating = true
     private var rotationSpeedIndex = 1
     private var cameraPresetIndex = 0
+    private var currentModelAvailable = false
     private var isFullScreen = false
     private var showAllLabels = false
     private var identifyMode = true
@@ -122,6 +125,7 @@ class FirstFragment : Fragment() {
     private var textToSpeech: TextToSpeech? = null
     private lateinit var modelStorageDirectory: File
     private lateinit var modelRepository: ModelRepository
+    private lateinit var remoteCatalogRepository: RemoteBiologyCatalogRepository
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -137,6 +141,10 @@ class FirstFragment : Fragment() {
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
         modelRepository = ModelRepository(requireContext())
+        remoteCatalogRepository = RemoteBiologyCatalogRepository(
+            requireContext(),
+            BuildConfig.BIOLOGY_CATALOG_URL
+        )
         restoreIdentificationSettings()
         restoreBiologyExperienceSettings()
         restoreBookmarks()
@@ -150,6 +158,7 @@ class FirstFragment : Fragment() {
         configureAccessibility()
         configureTabletTwoPane()
         configureModelDiscovery()
+        loadRemoteCatalog()
         configureLearningModes()
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -193,6 +202,7 @@ class FirstFragment : Fragment() {
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
+        remoteCatalogRepository.close()
         modelRepository.close()
         if (isFullScreen) exitFullScreen()
         binding.modelWebView.removeJavascriptInterface(BRIDGE_NAME)
@@ -239,7 +249,12 @@ class FirstFragment : Fragment() {
             }
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    if (_binding != null && binding.viewerStatusOverlay.visibility == View.VISIBLE) {
+                    if (
+                        _binding != null &&
+                        currentModelAvailable &&
+                        binding.viewerStatusOverlay.visibility == View.VISIBLE &&
+                        binding.modelProgress.visibility == View.VISIBLE
+                    ) {
                         binding.viewerStatusText.text =
                             if (newProgress < 100) {
                                 "Preparing viewer… $newProgress%"
@@ -544,6 +559,7 @@ class FirstFragment : Fragment() {
         }
 
         binding.partsHeader.setOnClickListener {
+            if (MODEL_CATALOG[selectedModelIndex].parts.isEmpty()) return@setOnClickListener
             partsExpanded = !partsExpanded
             val nextVisibility = if (partsExpanded) View.VISIBLE else View.GONE
             binding.partsList.visibility = nextVisibility
@@ -907,11 +923,13 @@ class FirstFragment : Fragment() {
         binding.modelOverviewHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
         binding.modelOverviewPanel.visibility =
             if (isExplore && modelOverviewExpanded) View.VISIBLE else View.GONE
-        binding.partsHeader.visibility = if (isExplore) View.VISIBLE else View.GONE
+        val hasParts = MODEL_CATALOG[selectedModelIndex].parts.isNotEmpty()
+        binding.partsHeader.visibility =
+            if (isExplore && hasParts) View.VISIBLE else View.GONE
         binding.partsList.visibility =
-            if (isExplore && partsExpanded) View.VISIBLE else View.GONE
+            if (isExplore && hasParts && partsExpanded) View.VISIBLE else View.GONE
         binding.infoPanel.visibility =
-            if (isExplore && partsExpanded) View.VISIBLE else View.GONE
+            if (isExplore && hasParts && partsExpanded) View.VISIBLE else View.GONE
         binding.workflowPanel.visibility = if (isExplore) View.GONE else View.VISIBLE
 
         if (isExplore) {
@@ -1511,8 +1529,11 @@ class FirstFragment : Fragment() {
         bookmarkedModels += preferences()
             .getStringSet(PREFERENCE_MODEL_BOOKMARKS, emptySet())
             .orEmpty()
-            .mapNotNull(String::toIntOrNull)
-            .filter { it in MODEL_CATALOG.indices }
+            .mapNotNull { token ->
+                token.toIntOrNull()
+                    ?.takeIf { it in MODEL_CATALOG.indices }
+                    ?: MODEL_CATALOG.indexOfFirst { it.id == token }.takeIf { it >= 0 }
+            }
     }
 
     private fun toggleModelBookmark(modelIndex: Int) {
@@ -1524,7 +1545,10 @@ class FirstFragment : Fragment() {
             true
         }
         preferences().edit()
-            .putStringSet(PREFERENCE_MODEL_BOOKMARKS, bookmarkedModels.map(Int::toString).toSet())
+            .putStringSet(
+                PREFERENCE_MODEL_BOOKMARKS,
+                bookmarkedModels.mapNotNull { MODEL_CATALOG.getOrNull(it)?.id }.toSet()
+            )
             .apply()
         updateModelBriefing()
         renderModelCatalog()
@@ -1655,17 +1679,7 @@ class FirstFragment : Fragment() {
     }
 
     private fun configureModelDiscovery() {
-        recentModelIndices.clear()
-        val savedRecent = requireContext()
-            .getSharedPreferences(PREFERENCES_NAME, 0)
-            .getString(PREFERENCE_RECENT_MODELS, "")
-            .orEmpty()
-        recentModelIndices += savedRecent
-            .split(",")
-            .mapNotNull(String::toIntOrNull)
-            .filter { it in MODEL_CATALOG.indices }
-            .distinct()
-            .take(MAX_RECENT_MODELS)
+        restoreRecentModels()
 
         FILTERS.forEach { filter ->
             binding.filterStrip.addView(createFilterChip(filter))
@@ -1677,6 +1691,47 @@ class FirstFragment : Fragment() {
 
         renderModelCatalog()
         selectModel(recentModelIndices.firstOrNull() ?: 0)
+    }
+
+    private fun loadRemoteCatalog() {
+        remoteCatalogRepository.load { result ->
+            if (_binding == null) return@load
+            if (result.models.isEmpty()) {
+                if (BuildConfig.BIOLOGY_CATALOG_URL.isNotBlank() && !result.warning.isNullOrBlank()) {
+                    Toast.makeText(requireContext(), result.warning, Toast.LENGTH_LONG).show()
+                }
+                return@load
+            }
+            val activeId = MODEL_CATALOG.getOrNull(selectedModelIndex)?.id
+            MODEL_CATALOG.clear()
+            MODEL_CATALOG.addAll(result.models.map(modelRepository::hydrateInstalledModel))
+            restoreRecentModels()
+            restoreBookmarks()
+            selectedModelIndex = activeId
+                ?.let { id -> MODEL_CATALOG.indexOfFirst { it.id == id } }
+                ?.takeIf { it >= 0 }
+                ?: recentModelIndices.firstOrNull()
+                ?: 0
+            renderModelCatalog()
+            selectModel(selectedModelIndex)
+            result.warning?.let {
+                Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun restoreRecentModels() {
+        recentModelIndices.clear()
+        val saved = preferences().getString(PREFERENCE_RECENT_MODELS, "").orEmpty()
+        recentModelIndices += saved.split(",")
+            .map(String::trim)
+            .mapNotNull { token ->
+                token.toIntOrNull()
+                    ?.takeIf { it in MODEL_CATALOG.indices }
+                    ?: MODEL_CATALOG.indexOfFirst { it.id == token }.takeIf { it >= 0 }
+            }
+            .distinct()
+            .take(MAX_RECENT_MODELS)
     }
 
     private fun showModelLibrary() {
@@ -1711,14 +1766,23 @@ class FirstFragment : Fragment() {
                 MODEL_CATALOG.indexOfFirst { it.id == model.id } in bookmarkedModels
             },
             thumbnailFile = { model ->
-                MODEL_CATALOG.indexOfFirst { it.id == model.id }
-                    .takeIf { it >= 0 }
-                    ?.let(::thumbnailFile)
+                remoteCatalogRepository.thumbnailFile(model)
+                    ?: if (model.thumbnailUrl.isNullOrBlank()) {
+                        MODEL_CATALOG.indexOfFirst { it.id == model.id }
+                            .takeIf { it >= 0 }
+                            ?.let(::thumbnailFile)
+                    } else {
+                        null
+                    }
             },
+            requestThumbnail = remoteCatalogRepository::loadThumbnail,
             onSelected = { model ->
                 MODEL_CATALOG.indexOfFirst { it.id == model.id }
                     .takeIf { it >= 0 }
-                    ?.let(::selectModel)
+                    ?.let { index ->
+                        MODEL_CATALOG[index] = modelRepository.hydrateInstalledModel(model)
+                        selectModel(index)
+                    }
             },
             onFavourite = { model ->
                 MODEL_CATALOG.indexOfFirst { it.id == model.id }
@@ -1732,7 +1796,7 @@ class FirstFragment : Fragment() {
     }
 
     private fun showUnavailableModel(model: BiologyModel, reason: String) {
-        val sizeLine = model.fileSizeBytes?.let {
+        val sizeLine = (model.packageSizeBytes ?: model.fileSizeBytes)?.let {
             "\n\nApproximate download size: ${com.indianservers.biology.ui.BiologyModelAdapter.formatBytes(it)}"
         }.orEmpty()
         AlertDialog.Builder(requireContext())
@@ -1905,6 +1969,16 @@ class FirstFragment : Fragment() {
     private fun configurePartList(model: BiologyModel) {
         selectedPartIndex = 0
         binding.partsList.removeAllViews()
+        val hasParts = model.parts.isNotEmpty()
+        binding.partsHeader.visibility =
+            if (currentMode == ExplorerMode.EXPLORE && hasParts) View.VISIBLE else View.GONE
+        binding.partsList.visibility =
+            if (currentMode == ExplorerMode.EXPLORE && hasParts && partsExpanded) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        binding.infoPanel.visibility = binding.partsList.visibility
         model.parts.forEachIndexed { index, part ->
             binding.partsList.addView(createPartRow(index, part))
         }
@@ -1964,7 +2038,10 @@ class FirstFragment : Fragment() {
         requireContext()
             .getSharedPreferences(PREFERENCES_NAME, 0)
             .edit()
-            .putString(PREFERENCE_RECENT_MODELS, recentModelIndices.joinToString(","))
+            .putString(
+                PREFERENCE_RECENT_MODELS,
+                recentModelIndices.mapNotNull { MODEL_CATALOG.getOrNull(it)?.id }.joinToString(",")
+            )
             .apply()
 
         binding.recentStrip.removeAllViews()
@@ -2089,6 +2166,7 @@ class FirstFragment : Fragment() {
 
     private fun showPartsPanel() {
         val model = MODEL_CATALOG[selectedModelIndex]
+        if (model.parts.isEmpty()) return
         val dialog = BottomSheetDialog(requireContext())
         val content = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -2259,6 +2337,7 @@ class FirstFragment : Fragment() {
         partBottomSheet?.dismiss()
 
         val model = MODEL_CATALOG[selectedModelIndex]
+        if (model.parts.isEmpty()) return
         val part = model.parts[selectedPartIndex]
         val dialog = BottomSheetDialog(requireContext())
         val content = LinearLayout(requireContext()).apply {
@@ -2485,6 +2564,7 @@ class FirstFragment : Fragment() {
         val storedModel = findStoredModel(model.fileName)
         val bundled = isBundledModelAvailable(model.fileName)
         val available = storedModel != null || bundled
+        currentModelAvailable = available
         binding.modelAvailability.text = if (available) "READY" else "NEEDS FILE"
         binding.modelAvailability.setTextColor(
             if (available) readyTextColor else inactiveTextColor
@@ -2634,7 +2714,7 @@ class FirstFragment : Fragment() {
         @JavascriptInterface
         fun onLoadingStage(stage: String, progress: Int) {
             activity?.runOnUiThread {
-                if (_binding == null) return@runOnUiThread
+                if (_binding == null || !currentModelAvailable) return@runOnUiThread
                 binding.viewerStatusOverlay.visibility = View.VISIBLE
                 binding.modelProgress.visibility = View.VISIBLE
                 binding.viewerStatusActions.visibility = View.GONE
@@ -2955,7 +3035,7 @@ class FirstFragment : Fragment() {
             )
         }
 
-        val MODEL_CATALOG = listOf(
+        val BUILT_IN_MODEL_CATALOG = listOf(
             model(
                 "Bacteriacell.glb", "Bacteria Cell", "Bacteria", "BC",
                 listOf(

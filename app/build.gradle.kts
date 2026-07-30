@@ -24,7 +24,11 @@ val bundledBiologyModels = setOf(
     "Vacuole.glb"
 )
 val omitBundledModels =
-    providers.gradleProperty("omitBundledModels").map(String::toBoolean).getOrElse(false)
+    providers.gradleProperty("omitBundledModels").map(String::toBoolean).getOrElse(true)
+val biologyCatalogUrl =
+    providers.gradleProperty("biologyCatalogUrl").getOrElse("")
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
 val modelsExcludedFromApk =
     if (omitBundledModels) biologyModelCatalog else biologyModelCatalog - bundledBiologyModels
 
@@ -42,6 +46,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "BIOLOGY_CATALOG_URL", "\"$biologyCatalogUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -61,6 +66,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
     androidResources {
         noCompress += "glb"

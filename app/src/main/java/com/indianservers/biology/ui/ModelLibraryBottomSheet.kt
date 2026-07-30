@@ -32,6 +32,7 @@ class ModelLibraryBottomSheet(
     private val isAvailable: (BiologyModel) -> Boolean,
     private val isFavourite: (BiologyModel) -> Boolean,
     private val thumbnailFile: (BiologyModel) -> File?,
+    private val requestThumbnail: (BiologyModel, (File?) -> Unit) -> Unit,
     private val onSelected: (BiologyModel) -> Unit,
     private val onFavourite: (BiologyModel) -> Unit,
     private val onUnavailable: (BiologyModel, String) -> Unit
@@ -51,6 +52,7 @@ class ModelLibraryBottomSheet(
         isFavourite = isFavourite,
         downloadRecord = { records[it.id] },
         thumbnailFile = thumbnailFile,
+        requestThumbnail = requestThumbnail,
         onSelected = ::handleSelection,
         onFavourite = {
             onFavourite(it)
@@ -226,7 +228,7 @@ class ModelLibraryBottomSheet(
             dialog.dismiss()
             return
         }
-        if (model.glbUrl.isNullOrBlank()) {
+        if (model.glbUrl.isNullOrBlank() && model.packageUrl.isNullOrBlank()) {
             onUnavailable(
                 model,
                 "This model is in the catalogue, but its online download source is not configured yet."
