@@ -45,6 +45,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import com.indianservers.biology.databinding.FragmentFirstBinding
 import com.indianservers.biology.data.AnatomyPart
 import com.indianservers.biology.data.BiologyCategories
@@ -153,6 +154,9 @@ class FirstFragment : Fragment() {
         setSystemBarsVisible(true)
         configureViewer()
         configureViewerControls()
+        binding.libraryButton.setOnClickListener {
+            findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment)
+        }
         configureExpanders()
         configureBiologyExperience()
         configureAccessibility()

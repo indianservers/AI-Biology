@@ -29,6 +29,10 @@ val biologyCatalogUrl =
     providers.gradleProperty("biologyCatalogUrl").getOrElse("")
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
+val biologyInfographicCatalogUrl =
+    providers.gradleProperty("biologyInfographicCatalogUrl").getOrElse("")
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
 val modelsExcludedFromApk =
     if (omitBundledModels) biologyModelCatalog else biologyModelCatalog - bundledBiologyModels
 
@@ -47,6 +51,11 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "BIOLOGY_CATALOG_URL", "\"$biologyCatalogUrl\"")
+        buildConfigField(
+            "String",
+            "BIOLOGY_INFOGRAPHIC_CATALOG_URL",
+            "\"$biologyInfographicCatalogUrl\""
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
