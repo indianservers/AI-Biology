@@ -38,6 +38,7 @@ class ModelLibraryBottomSheet(
     private val onUnavailable: (BiologyModel, String) -> Unit
 ) {
     private val dialog = BottomSheetDialog(context)
+    private val isTelevision = DeviceProfile.isTelevision(context)
     private val binding = SheetModelLibraryBinding.inflate(dialog.layoutInflater)
     private val queryExecutor = Executors.newSingleThreadExecutor()
     private val queryGeneration = AtomicInteger()
@@ -73,12 +74,14 @@ class ModelLibraryBottomSheet(
         dialog.setOnDismissListener { queryExecutor.shutdownNow() }
         dialog.show()
         dialog.behavior.apply {
-            isDraggable = true
+            isDraggable = !isTelevision
             isFitToContents = false
             halfExpandedRatio = 0.55f
             expandedOffset = 24.dp
             peekHeight = 72.dp
-            state = BottomSheetBehavior.STATE_COLLAPSED
+            state =
+                if (isTelevision) BottomSheetBehavior.STATE_EXPANDED
+                else BottomSheetBehavior.STATE_COLLAPSED
             addBottomSheetCallback(
                 object : BottomSheetBehavior.BottomSheetCallback() {
                     override fun onStateChanged(bottomSheet: View, newState: Int) {
@@ -98,13 +101,28 @@ class ModelLibraryBottomSheet(
         }
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.apply {
             background = null
-            layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.92f).toInt()
+            layoutParams.height =
+                if (isTelevision) ViewGroup.LayoutParams.MATCH_PARENT
+                else (context.resources.displayMetrics.heightPixels * 0.92f).toInt()
+        }
+        if (isTelevision) {
+            listOf(
+                binding.librarySearch,
+                binding.librarySort,
+                binding.libraryRetry,
+                binding.libraryExpandButton
+            ).forEach { TvFocus.apply(it) }
+            binding.librarySearch.requestFocus()
         }
     }
 
     private fun configureGrid() {
         val spanCount =
-            if (context.resources.configuration.smallestScreenWidthDp >= 840) 3 else 2
+            when {
+                isTelevision -> 5
+                context.resources.configuration.smallestScreenWidthDp >= 840 -> 3
+                else -> 2
+            }
         binding.modelLibraryGrid.layoutManager = GridLayoutManager(context, spanCount)
         binding.modelLibraryGrid.adapter = adapter
         binding.modelLibraryGrid.addOnScrollListener(
@@ -293,6 +311,7 @@ class ModelLibraryBottomSheet(
             isFocusable = true
             contentDescription = "$title filter"
             setOnClickListener { action() }
+            if (isTelevision) TvFocus.apply(this)
         }
 
     private val Int.dp: Int

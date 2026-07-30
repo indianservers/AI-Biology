@@ -78,6 +78,13 @@ class BiologyModelAdapter(
                 "${model.title}. ${model.categoryId}. ${binding.modelDownloadState.text}."
             binding.root.setOnClickListener { onSelected(model) }
             binding.favouriteButton.setOnClickListener { onFavourite(model) }
+            if (DeviceProfile.isTelevision(binding.root.context)) {
+                binding.modelCardTitle.textSize = 17f
+                binding.modelCardCategory.textSize = 12f
+                binding.modelDownloadState.textSize = 12f
+                TvFocus.apply(binding.root)
+                TvFocus.apply(binding.favouriteButton, focusedScale = 1.03f)
+            }
             loadThumbnail(model)
         }
 

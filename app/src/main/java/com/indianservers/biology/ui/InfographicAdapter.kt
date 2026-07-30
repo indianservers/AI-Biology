@@ -66,6 +66,18 @@ class InfographicAdapter(
                     onSaveOrRemove(infographic)
                 }
             }
+            if (DeviceProfile.isTelevision(binding.root.context)) {
+                binding.infographicTitle.textSize = 18f
+                binding.infographicSummary.textSize = 14f
+                binding.infographicCategory.textSize = 12f
+                binding.infographicAction.textSize = 14f
+                binding.infographicPreview.layoutParams =
+                    binding.infographicPreview.layoutParams.apply {
+                        height = (118 * binding.root.resources.displayMetrics.density).toInt()
+                    }
+                TvFocus.apply(binding.root)
+                TvFocus.apply(binding.infographicAction, focusedScale = 1.03f)
+            }
             loadThumbnail(infographic)
         }
 

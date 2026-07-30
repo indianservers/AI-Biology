@@ -22,6 +22,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -55,6 +56,8 @@ import com.indianservers.biology.data.ModelPart
 import com.indianservers.biology.data.ModelRepository
 import com.indianservers.biology.data.RemoteBiologyCatalogRepository
 import com.indianservers.biology.ui.ModelLibraryBottomSheet
+import com.indianservers.biology.ui.DeviceProfile
+import com.indianservers.biology.ui.TvFocus
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import org.json.JSONArray
@@ -123,6 +126,8 @@ class FirstFragment : Fragment() {
     private var originalViewerLayoutParams: ViewGroup.LayoutParams? = null
     private var tabletTwoPaneContainer: LinearLayout? = null
     private var tabletPartsColumn: LinearLayout? = null
+    private var tabletViewerColumn: LinearLayout? = null
+    private var isTelevision = false
     private var textToSpeech: TextToSpeech? = null
     private lateinit var modelStorageDirectory: File
     private lateinit var modelRepository: ModelRepository
@@ -141,6 +146,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
+        isTelevision = DeviceProfile.isTelevision(requireContext())
         modelRepository = ModelRepository(requireContext())
         remoteCatalogRepository = RemoteBiologyCatalogRepository(
             requireContext(),
@@ -161,6 +167,7 @@ class FirstFragment : Fragment() {
         configureBiologyExperience()
         configureAccessibility()
         configureTabletTwoPane()
+        configureTelevisionExperience()
         configureModelDiscovery()
         loadRemoteCatalog()
         configureLearningModes()
@@ -420,7 +427,13 @@ class FirstFragment : Fragment() {
         )
 
         isFullScreen = true
-        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        requireActivity().requestedOrientation =
+            if (isTelevision) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        if (isTelevision) {
+            viewer.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            viewer.requestFocus()
+        }
         binding.fullScreenTitle.text = MODEL_CATALOG[selectedModelIndex].title
         binding.fullScreenButton.text = "X"
         binding.fullScreenButton.contentDescription = "Close full screen"
@@ -448,7 +461,9 @@ class FirstFragment : Fragment() {
         )
 
         isFullScreen = false
-        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        requireActivity().requestedOrientation =
+            if (isTelevision) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         uiHandler.removeCallbacks(hideFullScreenControls)
         uiHandler.removeCallbacks(hideFullScreenHint)
         setFullScreenControlsVisible(true)
@@ -858,7 +873,6 @@ class FirstFragment : Fragment() {
     private fun configureTabletTwoPane() {
         if (resources.configuration.smallestScreenWidthDp < 600) return
         val content = binding.contentColumn
-        val insertAt = content.indexOfChild(binding.modelOverviewPanel) + 1
         listOf(
             binding.viewerContainer,
             binding.interactionHint,
@@ -866,29 +880,46 @@ class FirstFragment : Fragment() {
             binding.partsList,
             binding.infoPanel
         ).forEach { (it.parent as? ViewGroup)?.removeView(it) }
+        val insertAt =
+            (content.indexOfChild(binding.modelOverviewPanel) + 1)
+                .coerceIn(0, content.childCount)
 
         val left = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.38f)
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                if (isTelevision) 0.28f else 0.38f
+            )
             setPadding(0, 0, 8.dp, 0)
             addView(binding.partsHeader)
             addView(binding.partsList)
             addView(binding.infoPanel)
         }
+        val televisionViewerHeight =
+            (resources.displayMetrics.heightPixels * 0.62f)
+                .toInt()
+                .coerceIn(320.dp, 520.dp)
         val right = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.62f)
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                if (isTelevision) 0.72f else 0.62f
+            )
             setPadding(8.dp, 0, 0, 0)
             addView(
                 binding.viewerContainer,
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    resources.getDimensionPixelSize(R.dimen.biology_viewer_height)
+                    if (isTelevision) televisionViewerHeight
+                    else resources.getDimensionPixelSize(R.dimen.biology_viewer_height)
                 )
             )
             addView(binding.interactionHint)
         }
         tabletPartsColumn = left
+        tabletViewerColumn = right
         tabletTwoPaneContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             isBaselineAligned = false
@@ -900,6 +931,92 @@ class FirstFragment : Fragment() {
             addView(right)
         }
         content.addView(tabletTwoPaneContainer, insertAt)
+    }
+
+    private fun configureTelevisionExperience() {
+        if (!isTelevision) return
+        modelOverviewExpanded = false
+        modelDiscoveryExpanded = false
+        binding.modelOverviewPanel.visibility = View.GONE
+        binding.modelOverviewHeader.visibility = View.GONE
+        binding.modelDiscoveryPanel.visibility = View.GONE
+        binding.modelWebView.isFocusable = false
+        binding.modelWebView.isFocusableInTouchMode = false
+        binding.viewerContainer.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        binding.contentScroll.isFocusable = false
+        binding.topAppBar.setPadding(36.dp, binding.topAppBar.paddingTop, 36.dp, 0)
+        binding.learningModeTabs.setPadding(28.dp, 0, 28.dp, 0)
+        binding.contentColumn.setPadding(
+            28.dp,
+            binding.contentColumn.paddingTop,
+            28.dp,
+            binding.contentColumn.paddingBottom
+        )
+        (binding.viewerControlContainer.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.bottomMargin = 34.dp
+            binding.viewerControlContainer.layoutParams = it
+        }
+        (binding.askAiButton.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.bottomMargin = 96.dp
+            binding.askAiButton.layoutParams = it
+        }
+        binding.screenTitle.textSize = 22f
+        binding.modelTitle.textSize = 14f
+        listOf(
+            binding.exploreTab,
+            binding.learnTab,
+            binding.quizTab,
+            binding.notesTab
+        ).forEach { it.textSize = 16f }
+
+        listOf(
+            binding.libraryButton,
+            binding.accessibilityButton,
+            binding.exploreTab,
+            binding.learnTab,
+            binding.quizTab,
+            binding.notesTab,
+            binding.modelSelectorHeader,
+            binding.rotateLeftButton,
+            binding.rotateRightButton,
+            binding.rotationButton,
+            binding.rotationSpeedButton,
+            binding.resetViewButton,
+            binding.cameraViewButton,
+            binding.fullScreenButton,
+            binding.zoomInButton,
+            binding.zoomOutButton,
+            binding.orientationIndicator,
+            binding.askAiButton,
+            binding.retryModelButton,
+            binding.closeStatusButton
+        ).forEach { TvFocus.apply(it) }
+
+        TvFocus.apply(binding.viewerContainer, focusedScale = 1.01f)
+        binding.viewerContainer.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            if (
+                !isFullScreen &&
+                keyCode != KeyEvent.KEYCODE_DPAD_CENTER &&
+                keyCode != KeyEvent.KEYCODE_ENTER
+            ) {
+                return@setOnKeyListener false
+            }
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> runViewerCommand("rotateBy(-15)")
+                KeyEvent.KEYCODE_DPAD_RIGHT -> runViewerCommand("rotateBy(15)")
+                KeyEvent.KEYCODE_DPAD_UP -> runViewerCommand("zoomBy(0.88)")
+                KeyEvent.KEYCODE_DPAD_DOWN -> runViewerCommand("zoomBy(1.14)")
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER -> {
+                    if (isFullScreen) exitFullScreen() else enterFullScreen()
+                }
+                else -> return@setOnKeyListener false
+            }
+            onViewerControlUsed()
+            true
+        }
+        binding.viewerContainer.post { binding.viewerContainer.requestFocus() }
     }
 
     private fun configureLearningModes() {
@@ -1901,6 +2018,7 @@ class FirstFragment : Fragment() {
             setPadding(4.dp, 0, 4.dp, 0)
             layoutParams = LinearLayout.LayoutParams(126.dp, ViewGroup.LayoutParams.MATCH_PARENT)
             setOnClickListener { selectModel(index) }
+            if (isTelevision) TvFocus.apply(this)
         }
 
         val preview = FrameLayout(requireContext()).apply {
@@ -1983,6 +2101,14 @@ class FirstFragment : Fragment() {
                 View.GONE
             }
         binding.infoPanel.visibility = binding.partsList.visibility
+        if (isTelevision) {
+            tabletPartsColumn?.visibility =
+                if (hasParts && currentMode == ExplorerMode.EXPLORE) View.VISIBLE else View.GONE
+            tabletViewerColumn?.layoutParams =
+                (tabletViewerColumn?.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                    weight = if (hasParts) 0.72f else 1f
+                }
+        }
         model.parts.forEachIndexed { index, part ->
             binding.partsList.addView(createPartRow(index, part))
         }
@@ -2015,6 +2141,7 @@ class FirstFragment : Fragment() {
                 selectPart(index, updateViewer = true)
                 showPartBottomSheet()
             }
+            if (isTelevision) TvFocus.apply(this)
         }
     }
 

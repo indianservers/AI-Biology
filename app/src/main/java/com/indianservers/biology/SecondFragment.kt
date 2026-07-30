@@ -21,6 +21,8 @@ import com.indianservers.biology.data.InfographicRepository
 import com.indianservers.biology.databinding.DialogInfographicViewerBinding
 import com.indianservers.biology.databinding.FragmentSecondBinding
 import com.indianservers.biology.ui.InfographicAdapter
+import com.indianservers.biology.ui.DeviceProfile
+import com.indianservers.biology.ui.TvFocus
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -33,6 +35,7 @@ class SecondFragment : Fragment() {
     private var catalogue = emptyList<Infographic>()
     private var query = ""
     private var showSavedOnly = false
+    private var isTelevision = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -49,6 +52,7 @@ class SecondFragment : Fragment() {
             requireContext(),
             BuildConfig.BIOLOGY_INFOGRAPHIC_CATALOG_URL
         )
+        isTelevision = DeviceProfile.isTelevision(requireContext())
         configureInsets()
         configureGrid()
         configureActions()
@@ -57,8 +61,8 @@ class SecondFragment : Fragment() {
 
     private fun configureInsets() {
         val baseHeight = 82.dp
-        val start = binding.libraryTopBar.paddingStart
-        val end = binding.libraryTopBar.paddingEnd
+        val start = if (isTelevision) 36.dp else binding.libraryTopBar.paddingStart
+        val end = if (isTelevision) 36.dp else binding.libraryTopBar.paddingEnd
         ViewCompat.setOnApplyWindowInsetsListener(binding.libraryTopBar) { view, insets ->
             val system = insets.getInsets(WindowInsetsCompat.Type.statusBars())
             view.setPadding(start + system.left, system.top, end + system.right, 0)
@@ -70,6 +74,7 @@ class SecondFragment : Fragment() {
 
     private fun configureGrid() {
         val columns = when {
+            isTelevision -> 5
             resources.configuration.smallestScreenWidthDp >= 840 -> 4
             resources.configuration.smallestScreenWidthDp >= 600 -> 3
             else -> 2
@@ -82,6 +87,26 @@ class SecondFragment : Fragment() {
         )
         binding.infographicGrid.layoutManager = GridLayoutManager(requireContext(), columns)
         binding.infographicGrid.adapter = adapter
+        if (isTelevision) {
+            binding.infographicGrid.setPadding(26.dp, 8.dp, 26.dp, 24.dp)
+            binding.libraryTitle.textSize = 24f
+            binding.librarySubtitle.textSize = 14f
+            binding.infographicSearch.textSize = 16f
+            binding.allInfographicsFilter.textSize = 15f
+            binding.savedInfographicsFilter.textSize = 15f
+            listOf(
+                binding.libraryBack,
+                binding.libraryRefresh,
+                binding.infographicSearch,
+                binding.allInfographicsFilter,
+                binding.savedInfographicsFilter
+            ).forEach { TvFocus.apply(it) }
+            binding.allInfographicsFilter.post {
+                if (_binding != null && adapter.itemCount == 0) {
+                    binding.allInfographicsFilter.requestFocus()
+                }
+            }
+        }
     }
 
     private fun configureActions() {
@@ -258,6 +283,10 @@ class SecondFragment : Fragment() {
         dialog.setContentView(viewer.root)
         viewer.fullInfographicTitle.text = infographic.title
         viewer.closeInfographicViewer.setOnClickListener { dialog.dismiss() }
+        if (isTelevision) {
+            TvFocus.apply(viewer.closeInfographicViewer)
+            viewer.closeInfographicViewer.requestFocus()
+        }
         dialog.setOnDismissListener {
             (viewer.fullInfographicImage.drawable as? android.graphics.drawable.BitmapDrawable)
                 ?.bitmap
