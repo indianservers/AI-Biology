@@ -11,9 +11,51 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:defaultNavHost="true"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/globalBrandBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:navGraph="@navigation/nav_graph" />
+
+    <LinearLayout
+        android:id="@+id/globalBrandBar"
+        android:layout_width="0dp"
+        android:layout_height="34dp"
+        android:background="@drawable/bg_global_brand_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/poweredByLink"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:contentDescription="Open Indian Servers website"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:shadowColor="#B073E8C5"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="5"
+            android:text="Powered by www.IndianServers.com"
+            android:textColor="#D6EAF8"
+            android:textSize="9sp" />
+
+        <ImageButton
+            android:id="@+id/globalShareButton"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Share AI Explorer Biology"
+            android:padding="8dp"
+            android:src="@drawable/ic_share"
+            android:tint="#73E8C5"
+            android:tooltipText="Share app" />
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

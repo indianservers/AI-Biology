@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_biology_screen"
+    tools:context=".FourthFragment">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/anatomyTopBar"
+        android:layout_width="0dp"
+        android:layout_height="82dp"
+        android:background="#F2051427"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/anatomyBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Back to biology explorer"
+            android:gravity="center"
+            android:text="&lt;"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/anatomyTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Human Anatomy"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toTopOf="@id/anatomySubtitle"
+            app:layout_constraintEnd_toStartOf="@id/anatomyRefresh"
+            app:layout_constraintStart_toEndOf="@id/anatomyBack"
+            app:layout_constraintTop_toTopOf="@id/anatomyBack" />
+
+        <TextView
+            android:id="@+id/anatomySubtitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Explore systems. Understand the body."
+            android:textColor="#73E8C5"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="@id/anatomyBack"
+            app:layout_constraintEnd_toStartOf="@id/anatomyRefresh"
+            app:layout_constraintStart_toEndOf="@id/anatomyBack"
+            app:layout_constraintTop_toBottomOf="@id/anatomyTitle" />
+
+        <ImageButton
+            android:id="@+id/anatomyRefresh"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Refresh anatomy catalogue"
+            android:padding="11dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:tint="#FFFFFF"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/anatomyWorkspace"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/anatomyTopBar">
+
+        <LinearLayout
+            android:id="@+id/anatomySystemRail"
+            android:layout_width="match_parent"
+            android:layout_height="212dp"
+            android:background="#C908172B"
+            android:orientation="vertical"
+            android:paddingStart="10dp"
+            android:paddingTop="7dp"
+            android:paddingEnd="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Body systems"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/allAnatomyFilter"
+                    android:layout_width="58dp"
+                    android:layout_height="34dp"
+                    android:background="@drawable/bg_filter_chip_selected"
+                    android:gravity="center"
+                    android:text="All"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/libraryAnatomyFilter"
+                    android:layout_width="76dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_filter_chip"
+                    android:gravity="center"
+                    android:text="Library"
+                    android:textColor="#8FA6C5"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/anatomyStorageSummary"
+                android:layout_width="match_parent"
+                android:layout_height="22dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#748AA8"
+                android:textSize="10sp"
+                tools:text="2 downloaded · 24.8 MB" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/anatomySystemList"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:contentDescription="Human anatomy body systems"
+                android:orientation="horizontal"
+                tools:listitem="@layout/item_anatomy_system" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/anatomyViewerPane"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_stage_card">
+
+            <FrameLayout
+                android:id="@+id/anatomyViewerHost"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <WebView
+                    android:id="@+id/anatomyWebView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Interactive human anatomy model"
+                    android:focusable="true"
+                    android:importantForAccessibility="yes" />
+
+                <ImageView
+                    android:id="@+id/anatomyPreviewImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Selected anatomy model preview"
+                    android:padding="20dp"
+                    android:scaleType="fitCenter"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/anatomyEmptyState"
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="22dp">
+
+                <ProgressBar
+                    android:id="@+id/anatomyLoading"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:indeterminateTint="#73E8C5" />
+
+                <ProgressBar
+                    android:id="@+id/anatomyLoadProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="220dp"
+                    android:layout_height="6dp"
+                    android:layout_marginTop="10dp"
+                    android:max="100"
+                    android:progressBackgroundTint="#243853"
+                    android:progressTint="#55E7D0"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/anatomyEmptyTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center"
+                    android:text="Loading human anatomy"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/anatomyEmptyMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="3dp"
+                    android:text="Checking the body systems catalogue."
+                    android:textColor="#8FA6C5"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/anatomyViewerControls"
+                android:layout_width="52dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|end"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_control_rail"
+                android:orientation="vertical"
+                android:padding="4dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/anatomyRotation"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Pause automatic rotation"
+                    android:gravity="center"
+                    android:text="II"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/anatomyZoomIn"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Zoom in"
+                    android:gravity="center"
+                    android:text="+"
+                    android:textColor="#FFFFFF"
+                    android:textSize="25sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/anatomyZoomOut"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Zoom out"
+                    android:gravity="center"
+                    android:text="−"
+                    android:textColor="#FFFFFF"
+                    android:textSize="27sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/anatomyReset"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Reset anatomy view"
+                    android:padding="11dp"
+                    android:src="@android:drawable/ic_menu_revert"
+                    android:tint="#FFFFFF" />
+
+                <ImageButton
+                    android:id="@+id/anatomyAr"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Open anatomy model in augmented reality"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_ar_view"
+                    android:tint="#FFFFFF"
+                    android:tooltipText="View in AR"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/anatomyFullscreen"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="View anatomy full screen"
+                    android:drawableStart="@drawable/ic_fullscreen"
+                    android:gravity="center"
+                    android:tooltipText="View full screen" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/anatomyDetailPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_info_panel"
+                android:orientation="vertical"
+                android:padding="13dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/selectedAnatomyTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textColor="#FFFFFF"
+                            android:textSize="17sp"
+                            android:textStyle="bold"
+                            tools:text="Skeletal System" />
+
+                        <TextView
+                            android:id="@+id/selectedAnatomyScientificName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textColor="#73E8C5"
+                            android:textSize="11sp"
+                            tools:text="Systema skeletale" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/anatomyDownloadAction"
+                        android:layout_width="122dp"
+                        android:layout_height="42dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_quiz_button"
+                        android:gravity="center"
+                        android:text="Download"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <ImageButton
+                        android:id="@+id/anatomyDeleteAction"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:layout_marginStart="7dp"
+                        android:background="@drawable/bg_filter_chip"
+                        android:contentDescription="Delete anatomy model from App Library"
+                        android:padding="10dp"
+                        android:src="@android:drawable/ic_menu_delete"
+                        android:tint="#FFB2B9"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/anatomyDownloadProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:layout_marginTop="8dp"
+                    android:max="100"
+                    android:progressBackgroundTint="#243853"
+                    android:progressTint="#55E7D0"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/selectedAnatomyDescription"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:ellipsize="end"
+                    android:maxLines="3"
+                    android:textColor="#AAB9CE"
+                    android:textSize="12sp"
+                    tools:text="The skeleton supports the body and protects internal organs." />
+
+                <TextView
+                    android:id="@+id/anatomyCapabilityNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="System-level model · Rotate, pan and zoom"
+                    android:textColor="#748AA8"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/anatomyFullscreenOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#FF020A14"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <FrameLayout
+            android:id="@+id/anatomyFullscreenHost"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/closeAnatomyFullscreen"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Close full screen anatomy"
+            android:drawableStart="@drawable/ic_close"
+            android:gravity="center"
+            android:text="×"
+            android:textColor="@android:color/transparent"
+            android:textSize="0sp"
+            android:tooltipText="Close full screen" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

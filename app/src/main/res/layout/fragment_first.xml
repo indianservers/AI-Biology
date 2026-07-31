@@ -22,7 +22,7 @@
             android:id="@+id/screenTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Biology Explorer"
+            android:text="Explore 3D Models"
             android:textColor="#FFFFFF"
             android:textSize="19sp"
             android:textStyle="bold"
@@ -56,6 +56,23 @@
             android:textSize="11sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/anatomyButton"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/anatomyButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_filter_chip"
+            android:contentDescription="Back to Biology Home"
+            android:gravity="center"
+            android:text="&lt;"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:tooltipText="Biology Home"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/microscopyButton"
             app:layout_constraintTop_toTopOf="parent" />
 
@@ -72,6 +89,7 @@
             android:textSize="10sp"
             android:textStyle="bold"
             android:tooltipText="Virtual microscopy"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/libraryButton"
             app:layout_constraintTop_toTopOf="parent" />
@@ -89,6 +107,7 @@
             android:textSize="10sp"
             android:textStyle="bold"
             android:tooltipText="Infographic library"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/accessibilityButton"
             app:layout_constraintTop_toTopOf="parent" />
@@ -232,6 +251,17 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:indeterminateTint="#55E7D0" />
+
+                    <ProgressBar
+                        android:id="@+id/modelLoadProgress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="240dp"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="8dp"
+                        android:max="100"
+                        android:progressBackgroundTint="#243853"
+                        android:progressTint="#55E7D0"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/viewerStatusText"
@@ -424,8 +454,7 @@
                             android:id="@+id/fullScreenButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Open full screen"
-                            android:text="[]"
-                            android:textSize="12sp"
+                            android:drawableStart="@drawable/ic_fullscreen"
                             android:tooltipText="Open full screen" />
                     </LinearLayout>
                 </HorizontalScrollView>
@@ -474,8 +503,7 @@
                         android:id="@+id/fullScreenClose"
                         style="@style/BiologyViewerControl"
                         android:contentDescription="Close full screen"
-                        android:text="×"
-                        android:textSize="30sp"
+                        android:drawableStart="@drawable/ic_close"
                         android:tooltipText="Close full screen" />
                 </LinearLayout>
 

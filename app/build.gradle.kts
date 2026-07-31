@@ -37,11 +37,15 @@ val biologyMicroscopyCatalogUrl =
     providers.gradleProperty("biologyMicroscopyCatalogUrl").getOrElse("")
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
+val biologyAnatomyCatalogUrl =
+    providers.gradleProperty("biologyAnatomyCatalogUrl").getOrElse("")
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
 val modelsExcludedFromApk =
     if (omitBundledModels) biologyModelCatalog else biologyModelCatalog - bundledBiologyModels
 
 android {
-    namespace = "com.indianservers.biology"
+    namespace = "com.indianservers.AIbiology"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -49,7 +53,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.indianservers.biology"
+        applicationId = "com.indianservers.AIbiology"
         minSdk = 33
         targetSdk = 36
         versionCode = 1
@@ -64,6 +68,11 @@ android {
             "String",
             "BIOLOGY_MICROSCOPY_CATALOG_URL",
             "\"$biologyMicroscopyCatalogUrl\""
+        )
+        buildConfigField(
+            "String",
+            "BIOLOGY_ANATOMY_CATALOG_URL",
+            "\"$biologyAnatomyCatalogUrl\""
         )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -101,6 +110,8 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.androidx.recyclerview)
+    implementation("com.google.ar:core:1.54.0")
+    implementation("io.github.sceneview:arsceneview:2.3.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

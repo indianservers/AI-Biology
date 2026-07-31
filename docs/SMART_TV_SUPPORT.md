@@ -28,7 +28,7 @@ Debug builds can render the exact TV branch on a phone or tablet emulator:
 ```powershell
 adb shell wm size 1920x1080
 adb shell wm density 240
-adb shell am start -n com.indianservers.biology/.MainActivity `
+adb shell am start -n com.indianservers.AIbiology/.MainActivity `
   --ez force_tv_layout true
 ```
 

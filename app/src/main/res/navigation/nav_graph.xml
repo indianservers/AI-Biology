@@ -3,11 +3,31 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
-    app:startDestination="@id/FirstFragment">
+    app:startDestination="@id/HomeFragment">
+
+    <fragment
+        android:id="@+id/HomeFragment"
+        android:name="com.indianservers.AIbiology.HomeFragment"
+        android:label="Biology Home"
+        tools:layout="@layout/fragment_home">
+
+        <action
+            android:id="@+id/action_HomeFragment_to_FirstFragment"
+            app:destination="@id/FirstFragment" />
+        <action
+            android:id="@+id/action_HomeFragment_to_SecondFragment"
+            app:destination="@id/SecondFragment" />
+        <action
+            android:id="@+id/action_HomeFragment_to_ThirdFragment"
+            app:destination="@id/ThirdFragment" />
+        <action
+            android:id="@+id/action_HomeFragment_to_FourthFragment"
+            app:destination="@id/FourthFragment" />
+    </fragment>
 
     <fragment
         android:id="@+id/FirstFragment"
-        android:name="com.indianservers.biology.FirstFragment"
+        android:name="com.indianservers.AIbiology.FirstFragment"
         android:label="@string/first_fragment_label"
         tools:layout="@layout/fragment_first">
 
@@ -17,10 +37,13 @@
         <action
             android:id="@+id/action_FirstFragment_to_ThirdFragment"
             app:destination="@id/ThirdFragment" />
+        <action
+            android:id="@+id/action_FirstFragment_to_FourthFragment"
+            app:destination="@id/FourthFragment" />
     </fragment>
     <fragment
         android:id="@+id/SecondFragment"
-        android:name="com.indianservers.biology.SecondFragment"
+        android:name="com.indianservers.AIbiology.SecondFragment"
         android:label="@string/second_fragment_label"
         tools:layout="@layout/fragment_second">
 
@@ -30,7 +53,12 @@
     </fragment>
     <fragment
         android:id="@+id/ThirdFragment"
-        android:name="com.indianservers.biology.ThirdFragment"
+        android:name="com.indianservers.AIbiology.ThirdFragment"
         android:label="@string/third_fragment_label"
         tools:layout="@layout/fragment_third" />
+    <fragment
+        android:id="@+id/FourthFragment"
+        android:name="com.indianservers.AIbiology.FourthFragment"
+        android:label="@string/fourth_fragment_label"
+        tools:layout="@layout/fragment_fourth" />
 </navigation>

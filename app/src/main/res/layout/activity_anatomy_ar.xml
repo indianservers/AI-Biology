@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#020B18">
+
+    <io.github.sceneview.ar.ARSceneView
+        android:id="@+id/arSceneView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/arBrandBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/arTopBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        android:background="@drawable/bg_info_panel"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/arClose"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Close augmented reality"
+            android:padding="10dp"
+            android:src="@drawable/ic_close"
+            android:tint="#FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingStart="6dp">
+
+            <TextView
+                android:id="@+id/arTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/arStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Starting AR tracking..."
+                android:textColor="#73E8C5"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/arShare"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Share AI Explorer Biology"
+            android:padding="10dp"
+            android:src="@drawable/ic_share"
+            android:tint="#73E8C5" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/arControls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/bg_info_panel"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="8dp"
+        app:layout_constraintBottom_toTopOf="@id/arBrandBar"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ROTATE"
+            android:textColor="#A9BBD4"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/rotateX"
+                style="@style/BiologyViewerControl"
+                android:layout_width="48dp"
+                android:layout_height="42dp"
+                android:text="X" />
+
+            <Button
+                android:id="@+id/rotateY"
+                style="@style/BiologyViewerControl"
+                android:layout_width="48dp"
+                android:layout_height="42dp"
+                android:text="Y" />
+
+            <Button
+                android:id="@+id/rotateZ"
+                style="@style/BiologyViewerControl"
+                android:layout_width="48dp"
+                android:layout_height="42dp"
+                android:text="Z" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/arSmaller"
+                style="@style/BiologyViewerControl"
+                android:layout_width="48dp"
+                android:layout_height="42dp"
+                android:contentDescription="Make model smaller"
+                android:text="-" />
+
+            <Button
+                android:id="@+id/arRecenter"
+                style="@style/BiologyViewerControl"
+                android:layout_width="86dp"
+                android:layout_height="42dp"
+                android:text="Recenter" />
+
+            <Button
+                android:id="@+id/arLarger"
+                style="@style/BiologyViewerControl"
+                android:layout_width="48dp"
+                android:layout_height="42dp"
+                android:contentDescription="Make model larger"
+                android:text="+" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/arBrandBar"
+        android:layout_width="0dp"
+        android:layout_height="34dp"
+        android:background="@drawable/bg_global_brand_bar"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/arPoweredBy"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:shadowColor="#B073E8C5"
+            android:shadowRadius="5"
+            android:text="Powered by www.IndianServers.com"
+            android:textColor="#D6EAF8"
+            android:textSize="9sp" />
+
+        <TextView
+            android:id="@+id/arPrivacy"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:contentDescription="Open Google ARCore privacy policy"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:text="ARCore Privacy"
+            android:textColor="#8FA6C5"
+            android:textSize="9sp" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

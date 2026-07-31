@@ -266,7 +266,6 @@
                 hotspot.dataset.normal = part.normal || "0 0 1";
             }
             hotspot.dataset.label = part.title;
-            hotspot.dataset.visibilityAttribute = "visible";
             hotspot.setAttribute("aria-label", `Identify ${part.title}`);
             const label = document.createElement("span");
             label.className = "hotspot-label";
@@ -323,9 +322,12 @@
                 data = viewer.queryHotspot(hotspot.slot);
             }
             if (!data) continue;
+            const seed = parts[index].autoAnchor
+                ? automaticAnchorPoint(index, hotspots.length)
+                : data.canvasPosition;
             const surface = findSurfaceNear(
-                data.canvasPosition.x,
-                data.canvasPosition.y
+                seed.x,
+                seed.y
             );
             if (!surface) continue;
 
@@ -341,13 +343,25 @@
         layoutHotspotLabels();
     }
 
+    function automaticAnchorPoint(index, count) {
+        const columns = Math.min(3, Math.max(2, Math.ceil(Math.sqrt(count))));
+        const rows = Math.max(1, Math.ceil(count / columns));
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        return {
+            x: viewer.clientWidth * (0.30 + (column / Math.max(1, columns - 1)) * 0.40),
+            y: viewer.clientHeight * (0.27 + (row / Math.max(1, rows - 1)) * 0.46)
+        };
+    }
+
     function findSurfaceNear(x, y) {
         const offsets = [
             [0, 0],
             [-12, 0], [12, 0], [0, -12], [0, 12],
             [-24, -24], [24, -24], [-24, 24], [24, 24],
             [-36, 0], [36, 0], [0, -36], [0, 36],
-            [-52, -26], [52, -26], [-52, 26], [52, 26]
+            [-52, -26], [52, -26], [-52, 26], [52, 26],
+            [-80, 0], [80, 0], [0, -80], [0, 80]
         ];
         for (const [offsetX, offsetY] of offsets) {
             const sampleX = Math.max(1, Math.min(viewer.clientWidth - 1, x + offsetX));

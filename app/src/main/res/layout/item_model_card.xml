@@ -113,22 +113,36 @@
     <TextView
         android:id="@+id/modelDownloadState"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="36dp"
         android:layout_marginTop="5dp"
+        android:background="@drawable/bg_filter_chip_selected"
         android:ellipsize="end"
+        android:gravity="center"
         android:maxLines="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
         android:textColor="#73E8C5"
         android:textSize="11sp"
         android:textStyle="bold" />
 
     <ProgressBar
+        android:id="@+id/modelDownloadProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="5dp"
+        android:layout_marginTop="5dp"
+        android:max="100"
+        android:progressBackgroundTint="#243853"
+        android:progressTint="#55E7D0"
+        android:visibility="gone" />
+
+    <ProgressBar
         android:id="@+id/modelLearningProgress"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="6dp"
-        android:layout_marginTop="7dp"
+        android:layout_height="4dp"
+        android:layout_marginTop="4dp"
         android:max="100"
         android:progressBackgroundTint="#243853"
         android:progressTint="#8D65FF" />
 </LinearLayout>
-

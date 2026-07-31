@@ -8,14 +8,29 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const viewerScript = path.join(projectRoot, "app", "src", "main", "assets", "model-viewer.min.js");
 const outputDirectory = path.join(projectRoot, "app", "build", "cdn-thumbnails");
 const chrome = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-const roots = process.argv.slice(2);
+const force = process.argv.includes("--force");
+const modelFilter = process.argv.find(argument => argument.startsWith("--model="))
+  ?.slice("--model=".length)
+  .toLowerCase();
+const outputSlug = process.argv.find(argument => argument.startsWith("--output-slug="))
+  ?.slice("--output-slug=".length);
+const roots = process.argv.slice(2).filter(
+  argument =>
+    argument !== "--force" &&
+    !argument.startsWith("--model=") &&
+    !argument.startsWith("--output-slug=")
+);
 const models = new Map();
 const captures = new Map();
 
 fs.mkdirSync(outputDirectory, { recursive: true });
 for (const root of roots) {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (entry.isFile() && path.extname(entry.name).toLowerCase() === ".glb") {
+    if (
+      entry.isFile() &&
+      path.extname(entry.name).toLowerCase() === ".glb" &&
+      (!modelFilter || entry.name.toLowerCase() === modelFilter)
+    ) {
       models.set(entry.name.toLowerCase(), path.join(root, entry.name));
     }
   }
@@ -62,10 +77,17 @@ const server = http.createServer((request, response) => {
     const viewer = document.getElementById("viewer");
     viewer.addEventListener("load", async () => {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const blob = await viewer.toBlob({ idealAspect: true });
+      const blob = await viewer.toBlob();
       await fetch("/thumbnail?name=${encodeURIComponent(name)}", {
         method: "POST",
         body: await blob.arrayBuffer()
+      });
+    });
+    viewer.addEventListener("error", async event => {
+      const detail = event.detail?.message || event.detail?.type || event.type;
+      await fetch("/failure?name=${encodeURIComponent(name)}", {
+        method: "POST",
+        body: String(detail)
       });
     });
   </script>
@@ -89,17 +111,39 @@ const server = http.createServer((request, response) => {
     });
     return;
   }
+  if (url.pathname === "/failure" && request.method === "POST") {
+    const name = (url.searchParams.get("name") || "").toLowerCase();
+    const chunks = [];
+    request.on("data", chunk => chunks.push(chunk));
+    request.on("end", () => {
+      const capture = captures.get(name);
+      const message = Buffer.concat(chunks).toString("utf8") || "Unknown model-viewer error";
+      if (capture) capture.reject(new Error(`Could not render ${name}: ${message}`));
+      response.writeHead(204).end();
+    });
+    return;
+  }
   response.writeHead(404).end();
 });
 
 await new Promise(resolve => server.listen(4178, "127.0.0.1", resolve));
 try {
   for (const [name] of models) {
-    const slug = path.basename(name, ".glb").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const slug = outputSlug ||
+      path.basename(name, ".glb").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const screenshot = path.join(outputDirectory, `${slug}.png`);
+    if (!force && fs.existsSync(screenshot) && fs.statSync(screenshot).size > 0) {
+      process.stdout.write(`${name} -> retained ${screenshot}\n`);
+      continue;
+    }
     const url = `http://127.0.0.1:4178/render.html?name=${encodeURIComponent(name)}`;
+    const profileDirectory = fs.mkdtempSync(path.join(outputDirectory, ".chrome-profile-"));
     const browser = spawn(chrome, [
       "--headless=new",
+      `--user-data-dir=${profileDirectory}`,
+      "--no-first-run",
+      "--disable-extensions",
+      "--enable-logging=stderr",
       "--disable-gpu-sandbox",
       "--use-angle=swiftshader",
       "--enable-webgl",
@@ -107,7 +151,11 @@ try {
       "--hide-scrollbars",
       "--window-size=600,600",
       url
-    ], { windowsHide: true, stdio: "ignore" });
+    ], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+    let browserErrors = "";
+    browser.stderr.on("data", chunk => {
+      browserErrors = `${browserErrors}${chunk}`.slice(-8_000);
+    });
     const capture = new Promise((resolve, reject) => {
       const timeout = setTimeout(
         () => reject(new Error(`Timed out rendering ${name}`)),
@@ -118,6 +166,10 @@ try {
         resolve: () => {
           clearTimeout(timeout);
           resolve();
+        },
+        reject: error => {
+          clearTimeout(timeout);
+          reject(error);
         }
       });
     });
@@ -126,10 +178,28 @@ try {
       process.stdout.write(`${name} -> ${screenshot} (${fs.statSync(screenshot).size} bytes)\n`);
     } catch (error) {
       fs.rmSync(screenshot, { force: true });
-      process.stderr.write(`${error.message}\n`);
+      const diagnostics = browserErrors.trim();
+      process.stderr.write(`${error.message}${diagnostics ? `\n${diagnostics}\n` : "\n"}`);
     } finally {
       captures.delete(name);
+      const exited = new Promise(resolve => {
+        if (browser.exitCode !== null) resolve();
+        else browser.once("exit", resolve);
+      });
       browser.kill();
+      await exited;
+      try {
+        fs.rmSync(profileDirectory, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 300
+        });
+      } catch (error) {
+        process.stderr.write(
+          `Could not immediately remove temporary Chrome profile ${profileDirectory}: ${error.message}\n`
+        );
+      }
     }
   }
 } finally {

@@ -1,5 +1,5 @@
 param(
-    [string]$PackageName = "com.indianservers.biology",
+    [string]$PackageName = "com.indianservers.AIbiology",
     [string]$Serial = "",
     [string[]]$Models = @()
 )
