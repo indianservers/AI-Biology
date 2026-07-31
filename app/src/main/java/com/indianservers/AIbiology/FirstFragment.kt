@@ -2,6 +2,7 @@ package com.indianservers.AIbiology
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -35,6 +36,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -154,6 +156,7 @@ class FirstFragment : Fragment() {
             requireContext(),
             BuildConfig.BIOLOGY_CATALOG_URL
         )
+        remoteCatalogRepository.seedIfEmpty(BUILT_IN_MODEL_CATALOG)
         restoreIdentificationSettings()
         restoreBiologyExperienceSettings()
         restoreBookmarks()
@@ -172,6 +175,7 @@ class FirstFragment : Fragment() {
         configureAccessibility()
         configureTabletTwoPane()
         configureTelevisionExperience()
+        configureResponsiveViewer()
         configureModelDiscovery()
         loadRemoteCatalog()
         configureLearningModes()
@@ -349,6 +353,7 @@ class FirstFragment : Fragment() {
             if (isFullScreen) exitFullScreen() else enterFullScreen()
         }
         binding.orientationIndicator.setOnClickListener { showOrientationSelector() }
+        binding.viewerMoreButton.setOnClickListener(::showCompactViewerMenu)
         binding.askAiButton.setOnClickListener { showAskAiPanel() }
         binding.arButton.setOnClickListener {
             runViewerCommand("activateAR()")
@@ -363,6 +368,73 @@ class FirstFragment : Fragment() {
         }
         updateRotationSpeedControl()
         updateViewerCapabilities(MODEL_CATALOG[selectedModelIndex])
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (_binding != null) binding.root.post(::configureResponsiveViewer)
+    }
+
+    private fun configureResponsiveViewer() {
+        if (_binding == null) return
+        val landscape =
+            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val compact = landscape || isTelevision
+        binding.zoomControls.visibility = if (compact) View.GONE else View.VISIBLE
+        binding.askAiButton.visibility = if (compact) View.GONE else View.VISIBLE
+        binding.rotateLeftButton.visibility = if (compact) View.GONE else View.VISIBLE
+        binding.rotationSpeedButton.visibility = if (compact) View.GONE else View.VISIBLE
+        binding.viewerMoreButton.visibility = if (compact) View.VISIBLE else View.GONE
+        if (compact) {
+            val model = MODEL_CATALOG.getOrNull(selectedModelIndex)
+            binding.rotateRightButton.visibility =
+                if (model?.parts?.isNotEmpty() == true) View.VISIBLE else View.GONE
+            binding.cameraViewButton.visibility = View.GONE
+            binding.resetViewButton.visibility = View.GONE
+            binding.arButton.visibility = View.GONE
+            binding.viewerControlContainer.layoutParams =
+                binding.viewerControlContainer.layoutParams.apply { height = 48.dp }
+            if (!isTelevision && tabletTwoPaneContainer == null) {
+                val availableHeight =
+                    (resources.configuration.screenHeightDp - 164).coerceIn(210, 420).dp
+                binding.viewerContainer.layoutParams =
+                    binding.viewerContainer.layoutParams.apply { height = availableHeight }
+            }
+        } else {
+            binding.viewerContainer.layoutParams =
+                binding.viewerContainer.layoutParams.apply {
+                    height = resources.getDimensionPixelSize(R.dimen.biology_viewer_height)
+                }
+            updateViewerCapabilities(MODEL_CATALOG.getOrNull(selectedModelIndex) ?: return)
+        }
+    }
+
+    private fun showCompactViewerMenu(anchor: View) {
+        val model = MODEL_CATALOG.getOrNull(selectedModelIndex) ?: return
+        PopupMenu(requireContext(), anchor).apply {
+            menu.add("Reset view")
+            menu.add(if (isAutoRotating) "Pause rotation" else "Start rotation")
+            menu.add("Rotation speed")
+            if (model.supportsSectionView) menu.add("Section view")
+            if (model.supportsExplodedView) menu.add("Exploded view")
+            if (model.parts.isNotEmpty()) menu.add("Model parts")
+            if (model.supportsAr && !isTelevision) menu.add("Open AR")
+            menu.add("Ask about this model")
+            setOnMenuItemClickListener { item ->
+                when (item.title.toString()) {
+                    "Reset view" -> binding.rotateLeftButton.performClick()
+                    "Pause rotation", "Start rotation" -> binding.rotationButton.performClick()
+                    "Rotation speed" -> binding.rotationSpeedButton.performClick()
+                    "Section view" -> binding.resetViewButton.performClick()
+                    "Exploded view" -> binding.cameraViewButton.performClick()
+                    "Model parts" -> binding.rotateRightButton.performClick()
+                    "Open AR" -> binding.arButton.performClick()
+                    "Ask about this model" -> binding.askAiButton.performClick()
+                }
+                true
+            }
+            show()
+        }
     }
 
     private fun updateRotationControl() {
@@ -387,13 +459,17 @@ class FirstFragment : Fragment() {
     }
 
     private fun updateViewerCapabilities(model: BiologyModel) {
+        val compact =
+            isTelevision ||
+                resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         binding.rotateRightButton.visibility =
             if (model.supportsPartSelection) View.VISIBLE else View.GONE
         binding.cameraViewButton.visibility =
-            if (model.supportsExplodedView) View.VISIBLE else View.GONE
+            if (!compact && model.supportsExplodedView) View.VISIBLE else View.GONE
         binding.resetViewButton.visibility =
-            if (model.supportsSectionView) View.VISIBLE else View.GONE
-        binding.arButton.visibility = if (model.supportsAr) View.VISIBLE else View.GONE
+            if (!compact && model.supportsSectionView) View.VISIBLE else View.GONE
+        binding.arButton.visibility =
+            if (!compact && model.supportsAr) View.VISIBLE else View.GONE
     }
 
     private fun showOrientationSelector() {
@@ -993,6 +1069,7 @@ class FirstFragment : Fragment() {
             binding.resetViewButton,
             binding.cameraViewButton,
             binding.fullScreenButton,
+            binding.viewerMoreButton,
             binding.zoomInButton,
             binding.zoomOutButton,
             binding.orientationIndicator,

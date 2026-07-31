@@ -399,11 +399,30 @@ class FourthFragment : Fragment() {
 
     private fun downloadModel(model: BiologyModel) {
         val status = records[model.id]?.status
-        if (
-            status == ModelDownloadStatus.DOWNLOADING ||
-            status == ModelDownloadStatus.QUEUED ||
-            status == ModelDownloadStatus.DOWNLOADED
-        ) return
+        if (status == ModelDownloadStatus.DOWNLOADING ||
+            status == ModelDownloadStatus.QUEUED
+        ) {
+            AlertDialog.Builder(requireContext())
+                .setTitle(model.title)
+                .setMessage("Pause this download, or cancel it and remove partial data?")
+                .setNegativeButton("Keep downloading", null)
+                .setNeutralButton("Cancel download") { _, _ ->
+                    modelRepository.cancel(model.id)
+                    records = records - model.id
+                    adapter.notifyDataSetChanged()
+                    updateSelectedActions()
+                }
+                .setPositiveButton("Pause") { _, _ ->
+                    modelRepository.pause(model.id)?.let {
+                        records = records + (model.id to it)
+                        adapter.notifyDataSetChanged()
+                        updateSelectedActions()
+                    }
+                }
+                .show()
+            return
+        }
+        if (status == ModelDownloadStatus.DOWNLOADED) return
         modelRepository.download(model, explicitlySaved = true) { updated ->
             if (_binding == null) return@download
             records = records + (updated.modelId to updated)
@@ -456,13 +475,12 @@ class FourthFragment : Fragment() {
         val record = records[model.id]
         val downloaded = record?.status == ModelDownloadStatus.DOWNLOADED
         val downloading = record?.status == ModelDownloadStatus.DOWNLOADING ||
-            record?.status == ModelDownloadStatus.QUEUED
+            record?.status == ModelDownloadStatus.QUEUED ||
+            record?.status == ModelDownloadStatus.PAUSED
         binding.anatomyDeleteAction.visibility = if (downloaded) View.VISIBLE else View.GONE
         binding.anatomyAr.visibility =
             if (downloaded && !isTelevision) View.VISIBLE else View.GONE
-        binding.anatomyDownloadAction.isEnabled = !downloaded &&
-            record?.status != ModelDownloadStatus.DOWNLOADING &&
-            record?.status != ModelDownloadStatus.QUEUED
+        binding.anatomyDownloadAction.isEnabled = !downloaded
         binding.anatomyDownloadAction.alpha =
             if (binding.anatomyDownloadAction.isEnabled) 1f else 0.65f
         binding.anatomyDownloadProgress.visibility =
@@ -475,7 +493,9 @@ class FourthFragment : Fragment() {
             ModelDownloadStatus.DOWNLOADED -> "In Library"
             ModelDownloadStatus.QUEUED -> "Queued"
             ModelDownloadStatus.DOWNLOADING ->
-                "${(record.progress * 100).toInt()}%"
+                "Pause ${(record.progress * 100).toInt()}%"
+            ModelDownloadStatus.PAUSED ->
+                "Resume ${(record.progress * 100).toInt()}%"
             ModelDownloadStatus.FAILED -> "Retry"
             ModelDownloadStatus.UPDATE_AVAILABLE -> "Update"
             else -> model.packageSizeBytes?.let {

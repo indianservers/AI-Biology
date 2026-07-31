@@ -61,7 +61,8 @@ class AnatomySystemAdapter(
             binding.anatomySystemStatus.text = status(model, download)
             binding.anatomyDownloadButton.text = actionLabel(download)
             val downloading = download?.status == ModelDownloadStatus.DOWNLOADING ||
-                download?.status == ModelDownloadStatus.QUEUED
+                download?.status == ModelDownloadStatus.QUEUED ||
+                download?.status == ModelDownloadStatus.PAUSED
             binding.anatomyDownloadProgress.visibility =
                 if (downloading) View.VISIBLE else View.GONE
             binding.anatomyDownloadProgress.isIndeterminate =
@@ -126,6 +127,8 @@ class AnatomySystemAdapter(
             ModelDownloadStatus.QUEUED -> "WAITING TO DOWNLOAD"
             ModelDownloadStatus.DOWNLOADING ->
                 "DOWNLOADING ${(download.progress * 100).toInt()}%"
+            ModelDownloadStatus.PAUSED ->
+                "PAUSED ${(download.progress * 100).toInt()}%"
             ModelDownloadStatus.FAILED -> "DOWNLOAD FAILED"
             ModelDownloadStatus.UPDATE_AVAILABLE -> "UPDATE READY"
             else -> model.packageSizeBytes?.let {
@@ -138,7 +141,9 @@ class AnatomySystemAdapter(
                 ModelDownloadStatus.DOWNLOADED -> "Open"
                 ModelDownloadStatus.QUEUED -> "Queued"
                 ModelDownloadStatus.DOWNLOADING ->
-                    "${(download.progress * 100).toInt()}%"
+                    "Pause ${(download.progress * 100).toInt()}%"
+                ModelDownloadStatus.PAUSED ->
+                    "Resume ${(download.progress * 100).toInt()}%"
                 ModelDownloadStatus.FAILED -> "Retry"
                 ModelDownloadStatus.UPDATE_AVAILABLE -> "Update"
                 else -> "Download"

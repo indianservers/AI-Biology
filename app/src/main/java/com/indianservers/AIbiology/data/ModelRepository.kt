@@ -13,14 +13,20 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
 class ModelRepository(context: Context) {
     private val appContext = context.applicationContext
     private val database = ModelDownloadDatabase(appContext)
+    private val installedMetadata = ModelCatalogDatabase(appContext, "installed")
     private val executor = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val activeDownloads = ConcurrentHashMap<String, Future<*>>()
+    private val activeConnections = ConcurrentHashMap<String, HttpURLConnection>()
+    private val pauseRequests = ConcurrentHashMap.newKeySet<String>()
+    private val cancelRequests = ConcurrentHashMap.newKeySet<String>()
+    private val resumeRequests = ConcurrentHashMap.newKeySet<String>()
     private val modelDirectory = File(appContext.filesDir, "biology/3d").apply { mkdirs() }
     private val transientDirectory = File(appContext.cacheDir, "biology_models").apply { mkdirs() }
 
@@ -31,6 +37,17 @@ class ModelRepository(context: Context) {
             .mapTo(mutableSetOf(), ModelDownloadRecord::modelId)
 
     fun hydrateInstalledModel(model: BiologyModel): BiologyModel {
+        installedMetadata.get(model.id)?.let { saved ->
+            return saved.copy(
+                thumbnailUrl = model.thumbnailUrl,
+                glbUrl = model.glbUrl,
+                manifestUrl = model.manifestUrl,
+                packageUrl = model.packageUrl,
+                packageSizeBytes = model.packageSizeBytes,
+                packageChecksumSha256 = model.packageChecksumSha256,
+                isDownloaded = true
+            )
+        }
         val safeId = model.id.lowercase().replace(Regex("[^a-z0-9._-]"), "_")
         val manifestFile = File(modelDirectory, "$safeId.manifest.json")
         if (!manifestFile.isFile) return model
@@ -38,80 +55,10 @@ class ModelRepository(context: Context) {
         return runCatching {
             val manifest = JSONObject(manifestFile.readText())
             check(manifest.optString("id") == model.id)
-            val capabilities = manifest.optJSONObject("capabilities") ?: JSONObject()
-            val supportsParts = capabilities.optBoolean("partSelection", false)
-            val manifestParts = manifest.optJSONArray("parts")
-            val parts = if (supportsParts && manifestParts != null) {
-                buildList {
-                    repeat(manifestParts.length()) { index ->
-                        val part = manifestParts.optJSONObject(index) ?: return@repeat
-                        val recognition = part.optJSONObject("recognition") ?: JSONObject()
-                        val descriptions = part.optJSONObject("description") ?: JSONObject()
-                        val hotspot = recognition.optJSONObject("fallbackHotspot")
-                        val camera = part.optJSONObject("cameraPreset")
-                        val id = part.optString("id").trim()
-                        val title = part.optString("title").trim()
-                        if (id.isBlank() || title.isBlank()) return@repeat
-                        add(
-                            ModelPart(
-                                id = id,
-                                nodeNames = recognition.stringList("visibleNodeNames"),
-                                title = title,
-                                scientificName = part.optString("scientificName")
-                                    .trim()
-                                    .takeIf(String::isNotBlank),
-                                shortDescription = descriptions.optString("beginner")
-                                    .ifBlank { descriptions.optString("student") },
-                                detailedDescription = descriptions.optString("advanced")
-                                    .takeIf(String::isNotBlank),
-                                parentPartId = part.optString("parentPartId")
-                                    .trim()
-                                    .takeIf(String::isNotBlank),
-                                animationName = part.optString("animationName")
-                                    .trim()
-                                    .takeIf(String::isNotBlank),
-                                cameraPreset = camera?.let {
-                                    CameraPreset(
-                                        key = it.optString("key", id),
-                                        shortLabel = it.optString("shortLabel", title),
-                                        title = it.optString("title", title),
-                                        orbit = it.optString("orbit")
-                                            .takeIf(String::isNotBlank),
-                                        target = it.optString("target")
-                                            .takeIf(String::isNotBlank)
-                                    )
-                                },
-                                selectable = part.optBoolean("selectable", true),
-                                position = hotspot?.optString("position")
-                                    ?.takeIf(String::isNotBlank)
-                                    ?: "0 0 0",
-                                normal = hotspot?.optString("normal")
-                                    ?.takeIf(String::isNotBlank)
-                                    ?: "0 0 1",
-                                hitNodeNames = recognition.stringList("hitNodeNames")
-                            )
-                        )
-                    }
-                }
-            } else {
-                emptyList()
+            model.withManifest(manifest).also {
+                installedMetadata.upsert(it)
+                manifestFile.delete()
             }
-            model.copy(
-                parts = parts,
-                alternativeNames = manifest.stringList("alternativeNames"),
-                gradeLevels = manifest.stringList("gradeLevels").ifEmpty {
-                    model.gradeLevels
-                },
-                supportsAr = capabilities.optBoolean("ar", model.supportsAr),
-                supportsAnimations =
-                    capabilities.optBoolean("animations", model.supportsAnimations),
-                supportsExplodedView =
-                    capabilities.optBoolean("explodedView", model.supportsExplodedView),
-                supportsSectionView =
-                    capabilities.optBoolean("sectionView", model.supportsSectionView),
-                supportsPartSelection = supportsParts,
-                isDownloaded = true
-            )
         }.getOrDefault(model)
     }
 
@@ -127,6 +74,14 @@ class ModelRepository(context: Context) {
         explicitlySaved: Boolean,
         callback: (ModelDownloadRecord) -> Unit
     ) {
+        if (activeDownloads.containsKey(model.id)) {
+            if (database.get(model.id)?.status == ModelDownloadStatus.PAUSED) {
+                resumeRequests.add(model.id)
+                activeConnections.remove(model.id)?.disconnect()
+                activeDownloads[model.id]?.cancel(true)
+            }
+            return
+        }
         if (!model.packageUrl.isNullOrBlank()) {
             downloadPackage(model, explicitlySaved, callback)
             return
@@ -152,21 +107,30 @@ class ModelRepository(context: Context) {
             val partial = File(modelDirectory, "${model.fileName}.part")
             var connection: HttpURLConnection? = null
             try {
+                val existingBytes = partial.length().takeIf { it > 0L } ?: 0L
                 connection = URL(remoteUrl).openConnection() as HttpURLConnection
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 30_000
                 connection.instanceFollowRedirects = true
+                activeConnections[model.id] = connection
+                if (existingBytes > 0L) {
+                    connection.setRequestProperty("Range", "bytes=$existingBytes-")
+                }
                 connection.connect()
                 check(connection.responseCode in 200..299) {
                     "Server returned ${connection.responseCode}"
                 }
+                val append = existingBytes > 0L &&
+                    connection.responseCode == HttpURLConnection.HTTP_PARTIAL
+                val resumedBytes = if (append) existingBytes else 0L
                 val expected = connection.contentLengthLong.takeIf { it > 0 }
+                    ?.plus(resumedBytes)
                     ?: model.fileSizeBytes
                     ?: -1L
-                var copied = 0L
+                var copied = resumedBytes
                 var lastReported = -1
                 connection.inputStream.use { input ->
-                    FileOutputStream(partial).use { output ->
+                    FileOutputStream(partial, append).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         while (true) {
                             if (Thread.currentThread().isInterrupted) error("Download cancelled")
@@ -190,6 +154,7 @@ class ModelRepository(context: Context) {
                         }
                     }
                 }
+                checkDownloadStillActive(model.id)
                 check(isValidGlb(partial)) { "Downloaded file is not a valid GLB." }
                 model.checksumSha256?.let { expectedChecksum ->
                     check(sha256(partial).equals(expectedChecksum, ignoreCase = true)) {
@@ -210,20 +175,45 @@ class ModelRepository(context: Context) {
                 callbackOnMain(completed, callback)
                 trimTransientCache()
             } catch (error: Exception) {
-                partial.delete()
-                val failed = failedRecord(model, error.message ?: "Download failed")
-                    .copy(explicitlySaved = explicitlySaved)
-                database.upsert(failed)
-                callbackOnMain(failed, callback)
+                handleStoppedDownload(model, explicitlySaved, partial, error, callback)
             } finally {
                 connection?.disconnect()
                 activeDownloads.remove(model.id)
+                activeConnections.remove(model.id)
+                resumeAfterStopIfRequested(model, explicitlySaved, callback)
             }
         }
     }
 
-    fun cancel(modelId: String) {
-        activeDownloads.remove(modelId)?.cancel(true)
+    fun pause(modelId: String): ModelDownloadRecord? {
+        val current = database.get(modelId) ?: return null
+        if (current.status != ModelDownloadStatus.DOWNLOADING &&
+            current.status != ModelDownloadStatus.QUEUED
+        ) return current
+        pauseRequests.add(modelId)
+        activeConnections.remove(modelId)?.disconnect()
+        activeDownloads[modelId]?.cancel(true)
+        return current.copy(status = ModelDownloadStatus.PAUSED, errorMessage = null).also {
+            database.upsert(it)
+        }
+    }
+
+    fun cancel(modelId: String): ModelDownloadRecord? {
+        val current = database.get(modelId) ?: return null
+        cancelRequests.add(modelId)
+        pauseRequests.remove(modelId)
+        resumeRequests.remove(modelId)
+        activeConnections.remove(modelId)?.disconnect()
+        activeDownloads[modelId]?.cancel(true)
+        current.localFilePath?.let(::File)?.delete()
+        database.delete(modelId)
+        return current.copy(
+            localFilePath = null,
+            fileSizeBytes = 0L,
+            status = ModelDownloadStatus.NOT_DOWNLOADED,
+            progress = 0f,
+            errorMessage = null
+        )
     }
 
     fun remove(modelId: String, requireExplicitConfirmation: Boolean = true): Boolean {
@@ -232,6 +222,7 @@ class ModelRepository(context: Context) {
         record.localFilePath?.let(::File)?.delete()
         val safeId = modelId.lowercase().replace(Regex("[^a-z0-9._-]"), "_")
         File(modelDirectory, "$safeId.manifest.json").delete()
+        installedMetadata.delete(modelId)
         database.delete(modelId)
         return true
     }
@@ -253,9 +244,14 @@ class ModelRepository(context: Context) {
     }
 
     fun close() {
+        pauseRequests.addAll(activeDownloads.keys)
+        activeConnections.values.forEach(HttpURLConnection::disconnect)
+        activeConnections.clear()
         activeDownloads.values.forEach { it.cancel(true) }
         executor.shutdownNow()
+        runCatching { executor.awaitTermination(1, TimeUnit.SECONDS) }
         database.close()
+        installedMetadata.close()
     }
 
     private fun downloadPackage(
@@ -281,15 +277,24 @@ class ModelRepository(context: Context) {
                 ensureManagedDirectory(extractionDirectory)
                 extractionDirectory.deleteRecursively()
                 extractionDirectory.mkdirs()
+                val existingBytes = partial.length().takeIf { it > 0L } ?: 0L
                 connection = URL(packageUrl).openConnection() as HttpURLConnection
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 45_000
                 connection.instanceFollowRedirects = true
+                activeConnections[model.id] = connection
+                if (existingBytes > 0L) {
+                    connection.setRequestProperty("Range", "bytes=$existingBytes-")
+                }
                 connection.connect()
                 check(connection.responseCode in 200..299) {
                     "Server returned ${connection.responseCode}"
                 }
+                val append = existingBytes > 0L &&
+                    connection.responseCode == HttpURLConnection.HTTP_PARTIAL
+                val resumedBytes = if (append) existingBytes else 0L
                 val expected = connection.contentLengthLong.takeIf { it > 0L }
+                    ?.plus(resumedBytes)
                     ?: model.packageSizeBytes
                     ?: -1L
                 val maximumDownloadBytes = expected.takeIf { it > 0L }
@@ -305,8 +310,11 @@ class ModelRepository(context: Context) {
                     target = partial,
                     expectedBytes = expected,
                     maximumBytes = maximumDownloadBytes,
+                    existingBytes = resumedBytes,
+                    append = append,
                     callback = callback
                 )
+                checkDownloadStillActive(model.id)
                 model.packageChecksumSha256?.let { expectedChecksum ->
                     check(sha256(partial).equals(expectedChecksum, ignoreCase = true)) {
                         "Package checksum did not match."
@@ -317,7 +325,8 @@ class ModelRepository(context: Context) {
                     (model.packageSizeBytes ?: partial.length()) * 3L
                 ).coerceAtMost(MAX_EXTRACTED_PACKAGE_BYTES - 16L * 1024L * 1024L) +
                     16L * 1024L * 1024L
-                extractZip(partial, extractionDirectory, maximumExtractedBytes)
+                extractZip(partial, extractionDirectory, maximumExtractedBytes, model.id)
+                checkDownloadStillActive(model.id)
                 val manifestFile = File(extractionDirectory, "manifest.json")
                 check(manifestFile.isFile) { "Package has no manifest.json." }
                 val manifest = JSONObject(manifestFile.readText())
@@ -337,10 +346,7 @@ class ModelRepository(context: Context) {
                 if (target.exists()) target.delete()
                 extractedModel.copyTo(target, overwrite = true)
                 check(isValidGlb(target)) { "Installed model validation failed." }
-                manifestFile.copyTo(
-                    File(modelDirectory, "$safeId.manifest.json"),
-                    overwrite = true
-                )
+                installedMetadata.upsert(model.withManifest(manifest))
                 val completed = baseRecord(model, explicitlySaved).copy(
                     localFilePath = target.absolutePath,
                     downloadDateEpochMs = System.currentTimeMillis(),
@@ -353,18 +359,17 @@ class ModelRepository(context: Context) {
                 callbackOnMain(completed, callback)
                 trimTransientCache()
             } catch (error: Exception) {
-                val failed = failedRecord(model, error.message ?: "Package download failed")
-                    .copy(explicitlySaved = explicitlySaved)
-                database.upsert(failed)
-                callbackOnMain(failed, callback)
+                handleStoppedDownload(model, explicitlySaved, partial, error, callback)
             } finally {
                 connection?.disconnect()
-                partial.delete()
+                if (model.id !in pauseRequests) partial.delete()
                 runCatching {
                     ensureManagedDirectory(extractionDirectory)
                     extractionDirectory.deleteRecursively()
                 }
                 activeDownloads.remove(model.id)
+                activeConnections.remove(model.id)
+                resumeAfterStopIfRequested(model, explicitlySaved, callback)
             }
         }
     }
@@ -376,12 +381,14 @@ class ModelRepository(context: Context) {
         target: File,
         expectedBytes: Long,
         maximumBytes: Long,
+        existingBytes: Long,
+        append: Boolean,
         callback: (ModelDownloadRecord) -> Unit
     ) {
-        var copied = 0L
+        var copied = existingBytes
         var lastReported = -1
         input.use { source ->
-            FileOutputStream(target).use { output ->
+            FileOutputStream(target, append).use { output ->
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                 while (true) {
                     if (Thread.currentThread().isInterrupted) error("Download cancelled")
@@ -410,13 +417,144 @@ class ModelRepository(context: Context) {
         }
     }
 
-    private fun extractZip(zipFile: File, destination: File, maximumBytes: Long) {
+    private fun BiologyModel.withManifest(manifest: JSONObject): BiologyModel {
+        val capabilities = manifest.optJSONObject("capabilities") ?: JSONObject()
+        val supportsParts = capabilities.optBoolean("partSelection", false)
+        val manifestParts = manifest.optJSONArray("parts")
+        val importedParts =
+            if (supportsParts && manifestParts != null) {
+                buildList {
+                    repeat(manifestParts.length()) { index ->
+                        val part = manifestParts.optJSONObject(index) ?: return@repeat
+                        val recognition = part.optJSONObject("recognition") ?: JSONObject()
+                        val descriptions = part.optJSONObject("description") ?: JSONObject()
+                        val hotspot = recognition.optJSONObject("fallbackHotspot")
+                        val camera = part.optJSONObject("cameraPreset")
+                        val partId = part.optString("id").trim()
+                        val partTitle = part.optString("title").trim()
+                        if (partId.isBlank() || partTitle.isBlank()) return@repeat
+                        add(
+                            ModelPart(
+                                id = partId,
+                                nodeNames = recognition.stringList("visibleNodeNames"),
+                                title = partTitle,
+                                scientificName = part.optString("scientificName")
+                                    .trim().takeIf(String::isNotBlank),
+                                shortDescription = descriptions.optString("beginner")
+                                    .ifBlank { descriptions.optString("student") },
+                                detailedDescription = descriptions.optString("advanced")
+                                    .takeIf(String::isNotBlank),
+                                parentPartId = part.optString("parentPartId")
+                                    .trim().takeIf(String::isNotBlank),
+                                animationName = part.optString("animationName")
+                                    .trim().takeIf(String::isNotBlank),
+                                cameraPreset = camera?.let {
+                                    CameraPreset(
+                                        key = it.optString("key", partId),
+                                        shortLabel = it.optString("shortLabel", partTitle),
+                                        title = it.optString("title", partTitle),
+                                        orbit = it.optString("orbit").takeIf(String::isNotBlank),
+                                        target = it.optString("target").takeIf(String::isNotBlank)
+                                    )
+                                },
+                                selectable = part.optBoolean("selectable", true),
+                                position = hotspot?.optString("position")
+                                    ?.takeIf(String::isNotBlank) ?: "0 0 0",
+                                normal = hotspot?.optString("normal")
+                                    ?.takeIf(String::isNotBlank) ?: "0 0 1",
+                                hitNodeNames = recognition.stringList("hitNodeNames")
+                            )
+                        )
+                    }
+                }
+            } else {
+                emptyList()
+            }
+        return copy(
+            parts = importedParts,
+            alternativeNames = manifest.stringList("alternativeNames").ifEmpty {
+                alternativeNames
+            },
+            gradeLevels = manifest.stringList("gradeLevels").ifEmpty { gradeLevels },
+            supportsAr = capabilities.optBoolean("ar", supportsAr),
+            supportsAnimations = capabilities.optBoolean("animations", supportsAnimations),
+            supportsExplodedView = capabilities.optBoolean("explodedView", supportsExplodedView),
+            supportsSectionView = capabilities.optBoolean("sectionView", supportsSectionView),
+            supportsPartSelection = supportsParts,
+            isDownloaded = true
+        )
+    }
+
+    private fun resumeAfterStopIfRequested(
+        model: BiologyModel,
+        explicitlySaved: Boolean,
+        callback: (ModelDownloadRecord) -> Unit
+    ) {
+        if (!resumeRequests.remove(model.id)) return
+        pauseRequests.remove(model.id)
+        mainHandler.post { download(model, explicitlySaved, callback) }
+    }
+
+    private fun checkDownloadStillActive(modelId: String) {
+        if (Thread.currentThread().isInterrupted ||
+            modelId in pauseRequests ||
+            modelId in cancelRequests
+        ) {
+            error("Download stopped")
+        }
+    }
+
+    private fun handleStoppedDownload(
+        model: BiologyModel,
+        explicitlySaved: Boolean,
+        partial: File,
+        error: Exception,
+        callback: (ModelDownloadRecord) -> Unit
+    ) {
+        when {
+            cancelRequests.remove(model.id) -> {
+                partial.delete()
+                database.delete(model.id)
+                callbackOnMain(
+                    baseRecord(model, explicitlySaved).copy(
+                        status = ModelDownloadStatus.NOT_DOWNLOADED
+                    ),
+                    callback
+                )
+            }
+            model.id in pauseRequests -> {
+                val paused = baseRecord(model, explicitlySaved).copy(
+                    localFilePath = partial.absolutePath,
+                    fileSizeBytes = partial.length(),
+                    status = ModelDownloadStatus.PAUSED,
+                    progress = database.get(model.id)?.progress ?: 0f
+                )
+                database.upsert(paused)
+                callbackOnMain(paused, callback)
+            }
+            else -> {
+                partial.delete()
+                val failed = failedRecord(model, error.message ?: "Download failed")
+                    .copy(explicitlySaved = explicitlySaved)
+                database.upsert(failed)
+                callbackOnMain(failed, callback)
+            }
+        }
+    }
+
+    private fun extractZip(
+        zipFile: File,
+        destination: File,
+        maximumBytes: Long,
+        modelId: String
+    ) {
         val destinationRoot = destination.canonicalFile
         val destinationPath = destinationRoot.path + File.separator
         var extractedBytes = 0L
         var entryCount = 0
         ZipInputStream(FileInputStream(zipFile)).use { zip ->
             while (true) {
+                checkDownloadStillActive(modelId)
                 val entry = zip.nextEntry ?: break
                 entryCount += 1
                 check(entryCount <= 200) { "Package contains too many files." }

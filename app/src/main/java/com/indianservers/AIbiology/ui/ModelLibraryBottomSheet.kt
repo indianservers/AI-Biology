@@ -17,6 +17,7 @@ import com.indianservers.AIbiology.data.BiologyCatalogQuery
 import com.indianservers.AIbiology.data.BiologyCategories
 import com.indianservers.AIbiology.data.BiologyModel
 import com.indianservers.AIbiology.data.ModelDownloadRecord
+import com.indianservers.AIbiology.data.ModelDownloadStatus
 import com.indianservers.AIbiology.data.ModelRepository
 import com.indianservers.AIbiology.data.ModelSort
 import com.indianservers.AIbiology.databinding.SheetModelLibraryBinding
@@ -39,6 +40,9 @@ class ModelLibraryBottomSheet(
 ) {
     private val dialog = BottomSheetDialog(context)
     private val isTelevision = DeviceProfile.isTelevision(context)
+    private val isLandscape =
+        context.resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
     private val binding = SheetModelLibraryBinding.inflate(dialog.layoutInflater)
     private val queryExecutor = Executors.newSingleThreadExecutor()
     private val queryGeneration = AtomicInteger()
@@ -55,6 +59,7 @@ class ModelLibraryBottomSheet(
         thumbnailFile = thumbnailFile,
         requestThumbnail = requestThumbnail,
         onSelected = ::handleSelection,
+        onDownloadStateSelected = ::handleDownloadStateSelection,
         onFavourite = {
             onFavourite(it)
             binding.modelLibraryGrid.post {
@@ -72,6 +77,7 @@ class ModelLibraryBottomSheet(
         configureCategories()
         configureQuickSections()
         configureSearchAndSort()
+        configureCompactLayout()
         updateStorageSummary()
         submitQuery(showLoading = true)
         dialog.setOnDismissListener { queryExecutor.shutdownNow() }
@@ -117,6 +123,19 @@ class ModelLibraryBottomSheet(
             ).forEach { TvFocus.apply(it) }
             binding.librarySearch.requestFocus()
         }
+    }
+
+    private fun configureCompactLayout() {
+        if (!isLandscape && !isTelevision) return
+        binding.libraryHandle.layoutParams =
+            binding.libraryHandle.layoutParams.apply { height = 56.dp }
+        binding.libraryExpandButton.visibility = View.GONE
+        ((binding.libraryQuickSections.parent as? View)?.parent as? View)?.visibility = View.GONE
+        binding.librarySearch.layoutParams =
+            (binding.librarySearch.layoutParams as ViewGroup.MarginLayoutParams).apply {
+                height = 44.dp
+                topMargin = 6.dp
+            }
     }
 
     private fun configureGrid() {
@@ -269,6 +288,45 @@ class ModelLibraryBottomSheet(
         }
     }
 
+    private fun handleDownloadStateSelection(model: BiologyModel) {
+        when (records[model.id]?.status) {
+            ModelDownloadStatus.DOWNLOADING,
+            ModelDownloadStatus.QUEUED -> {
+                android.app.AlertDialog.Builder(context)
+                    .setTitle(model.title)
+                    .setMessage("Pause this download, or cancel it and remove partial data?")
+                    .setNegativeButton("Keep downloading", null)
+                    .setNeutralButton("Cancel download") { _, _ ->
+                        repository.cancel(model.id)?.let { updateRecord(it, keep = false) }
+                    }
+                    .setPositiveButton("Pause") { _, _ ->
+                        repository.pause(model.id)?.let(::updateRecord)
+                    }
+                    .show()
+            }
+            ModelDownloadStatus.PAUSED -> startDownload(model)
+            else -> handleSelection(model)
+        }
+    }
+
+    private fun startDownload(model: BiologyModel) {
+        repository.download(model, explicitlySaved = true) { record ->
+            updateRecord(record)
+            if (record.status == ModelDownloadStatus.DOWNLOADED) {
+                onSelected(model)
+                dialog.dismiss()
+            }
+        }
+    }
+
+    private fun updateRecord(record: ModelDownloadRecord, keep: Boolean = true) {
+        if (keep) records[record.modelId] = record else records.remove(record.modelId)
+        adapter.currentList.indexOfFirst { it.id == record.modelId }
+            .takeIf { it >= 0 }
+            ?.let(adapter::notifyItemChanged)
+        updateStorageSummary()
+    }
+
     private fun toggleSheetState() {
         dialog.behavior.state =
             if (dialog.behavior.state == BottomSheetBehavior.STATE_EXPANDED) {
@@ -299,7 +357,7 @@ class ModelLibraryBottomSheet(
         TextView(context).apply {
             layoutParams = ViewGroup.MarginLayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                48.dp
+                if (isLandscape || isTelevision) 40.dp else 48.dp
             ).apply { marginEnd = 8.dp }
             minWidth = 72.dp
             gravity = Gravity.CENTER

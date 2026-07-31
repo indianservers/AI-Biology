@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="246dp"
+    android:layout_height="@dimen/model_card_height"
     android:layout_margin="6dp"
     android:background="@drawable/bg_surface_panel"
     android:clickable="true"
@@ -11,7 +11,7 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="120dp"
+        android:layout_height="@dimen/model_card_thumbnail_height"
         android:background="@drawable/bg_thumbnail">
 
         <ImageView

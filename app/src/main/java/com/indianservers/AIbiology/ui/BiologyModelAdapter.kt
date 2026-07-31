@@ -1,6 +1,7 @@
 package com.indianservers.AIbiology.ui
 
 import android.graphics.BitmapFactory
+import android.content.res.Configuration
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,6 +23,7 @@ class BiologyModelAdapter(
     private val thumbnailFile: (BiologyModel) -> File?,
     private val requestThumbnail: (BiologyModel, (File?) -> Unit) -> Unit,
     private val onSelected: (BiologyModel) -> Unit,
+    private val onDownloadStateSelected: (BiologyModel) -> Unit = onSelected,
     private val onFavourite: (BiologyModel) -> Unit
 ) : ListAdapter<BiologyModel, BiologyModelAdapter.ModelViewHolder>(DIFF) {
 
@@ -56,6 +58,14 @@ class BiologyModelAdapter(
             binding.modelCardCategory.text =
                 listOfNotNull(model.categoryId, model.scientificName)
                     .joinToString("  |  ")
+            val compactPhoneLandscape =
+                binding.root.resources.configuration.orientation ==
+                    Configuration.ORIENTATION_LANDSCAPE &&
+                    binding.root.resources.configuration.smallestScreenWidthDp < 600
+            binding.modelCardCategory.visibility =
+                if (compactPhoneLandscape) View.GONE else View.VISIBLE
+            binding.modelLearningProgress.visibility =
+                if (compactPhoneLandscape) View.GONE else View.VISIBLE
             binding.modelPlaceholder.text = model.badge
             binding.badgeAr.visibility = if (model.supportsAr) View.VISIBLE else View.GONE
             binding.badgePremium.visibility = if (model.isPremium) View.VISIBLE else View.GONE
@@ -70,7 +80,8 @@ class BiologyModelAdapter(
                 (model.learningProgress.coerceIn(0f, 1f) * 100).toInt()
             binding.modelDownloadState.text = stateLabel(model, available, record)
             val downloading = record?.status == ModelDownloadStatus.DOWNLOADING ||
-                record?.status == ModelDownloadStatus.QUEUED
+                record?.status == ModelDownloadStatus.QUEUED ||
+                record?.status == ModelDownloadStatus.PAUSED
             binding.modelDownloadProgress.visibility =
                 if (downloading) View.VISIBLE else View.GONE
             binding.modelDownloadProgress.isIndeterminate =
@@ -91,7 +102,7 @@ class BiologyModelAdapter(
             binding.root.contentDescription =
                 "${model.title}. ${model.categoryId}. ${binding.modelDownloadState.text}."
             binding.root.setOnClickListener { onSelected(model) }
-            binding.modelDownloadState.setOnClickListener { onSelected(model) }
+            binding.modelDownloadState.setOnClickListener { onDownloadStateSelected(model) }
             binding.modelDownloadState.contentDescription =
                 "${binding.modelDownloadState.text} ${model.title}"
             binding.favouriteButton.setOnClickListener { onFavourite(model) }
@@ -145,7 +156,9 @@ class BiologyModelAdapter(
         return when (record?.status) {
             ModelDownloadStatus.QUEUED -> "QUEUED"
             ModelDownloadStatus.DOWNLOADING ->
-                "DOWNLOADING ${(record.progress * 100).toInt()}%"
+                "PAUSE  |  ${(record.progress * 100).toInt()}%"
+            ModelDownloadStatus.PAUSED ->
+                "RESUME  |  ${(record.progress * 100).toInt()}%"
             ModelDownloadStatus.UPDATE_AVAILABLE -> "UPDATE AVAILABLE"
             ModelDownloadStatus.FAILED -> "RETRY DOWNLOAD"
             ModelDownloadStatus.DOWNLOADED -> "OPEN"

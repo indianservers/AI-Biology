@@ -29,7 +29,8 @@ class RemoteBiologyCatalogRepository(
         if (cacheNamespace == DEFAULT_NAMESPACE) "biology/catalog"
         else "biology/catalog/$cacheNamespace"
     ).apply { mkdirs() }
-    private val catalogCache = File(catalogDirectory, "biology-catalog.json")
+    private val catalogDatabase = ModelCatalogDatabase(appContext, cacheNamespace)
+    private val legacyCatalogCache = File(catalogDirectory, "biology-catalog.json")
     private val thumbnailDirectory =
         File(
             appContext.filesDir,
@@ -57,6 +58,12 @@ class RemoteBiologyCatalogRepository(
                     }
             }
             mainHandler.post { callback(result) }
+        }
+    }
+
+    fun seedIfEmpty(models: List<BiologyModel>) {
+        if (models.isNotEmpty() && catalogDatabase.all().isEmpty()) {
+            catalogDatabase.replaceAll(models)
         }
     }
 
@@ -96,6 +103,7 @@ class RemoteBiologyCatalogRepository(
 
     fun close() {
         executor.shutdownNow()
+        catalogDatabase.close()
     }
 
     private fun downloadCatalog(): CatalogLoadResult {
@@ -123,7 +131,8 @@ class RemoteBiologyCatalogRepository(
             val json = bytes.toString(Charsets.UTF_8)
             val models = parseCatalog(json, catalogUrl)
             check(models.isNotEmpty()) { "Catalogue contains no models." }
-            FileOutputStream(catalogCache).use { it.write(bytes) }
+            catalogDatabase.replaceAll(models)
+            legacyCatalogCache.delete()
             preferences.edit()
                 .putString(PREFERENCE_CATALOG_ETAG, connection.getHeaderField("ETag"))
                 .putString(PREFERENCE_CATALOG_SOURCE_URL, catalogUrl)
@@ -135,16 +144,21 @@ class RemoteBiologyCatalogRepository(
     }
 
     private fun loadCachedResult(warning: String? = null): CatalogLoadResult {
-        if (!catalogCache.isFile || catalogCache.length() == 0L) {
-            return CatalogLoadResult(emptyList(), CatalogSource.NONE, warning)
-        }
         return runCatching {
-            val sourceUrl =
-                preferences.getString(PREFERENCE_CATALOG_SOURCE_URL, "").orEmpty()
-                    .ifBlank { catalogUrl }
+            var models = catalogDatabase.all()
+            if (models.isEmpty() && legacyCatalogCache.isFile) {
+                val sourceUrl =
+                    preferences.getString(PREFERENCE_CATALOG_SOURCE_URL, "").orEmpty()
+                        .ifBlank { catalogUrl }
+                models = parseCatalog(legacyCatalogCache.readText(), sourceUrl)
+                if (models.isNotEmpty()) {
+                    catalogDatabase.replaceAll(models)
+                    legacyCatalogCache.delete()
+                }
+            }
             CatalogLoadResult(
-                parseCatalog(catalogCache.readText(), sourceUrl),
-                CatalogSource.CACHE,
+                models,
+                if (models.isEmpty()) CatalogSource.NONE else CatalogSource.CACHE,
                 warning
             )
         }.getOrElse {

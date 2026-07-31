@@ -71,6 +71,7 @@ enum class ModelDownloadStatus {
     NOT_DOWNLOADED,
     QUEUED,
     DOWNLOADING,
+    PAUSED,
     DOWNLOADED,
     UPDATE_AVAILABLE,
     FAILED

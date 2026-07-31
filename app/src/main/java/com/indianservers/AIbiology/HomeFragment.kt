@@ -1,6 +1,7 @@
 package com.indianservers.AIbiology
 
 import android.os.Bundle
+import android.content.res.Configuration
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -42,7 +43,9 @@ class HomeFragment : Fragment() {
     }
 
     private fun configureInsets(isTelevision: Boolean) {
-        val baseHeight = 88.dp
+        val landscape =
+            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val baseHeight = if (landscape) 64.dp else 88.dp
         val horizontal = if (isTelevision) 38.dp else 22.dp
         ViewCompat.setOnApplyWindowInsetsListener(binding.homeTopBar) { topBar, insets ->
             val system = insets.getInsets(WindowInsetsCompat.Type.statusBars())
@@ -62,7 +65,10 @@ class HomeFragment : Fragment() {
 
     private fun configureLayout(isTelevision: Boolean) {
         val screenWidthDp = resources.configuration.screenWidthDp
-        val twoColumns = screenWidthDp >= 900
+        val landscape =
+            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val twoColumns = screenWidthDp >= 900 || (landscape && screenWidthDp >= 600)
+        val cardHeight = if (landscape) 100.dp else 116.dp
         val maximumContentWidth =
             if (twoColumns) 1400.dp
             else if (screenWidthDp >= 600) 760.dp
@@ -83,8 +89,12 @@ class HomeFragment : Fragment() {
             binding.microscopeModule,
             binding.infographicsModule
         )
+        cards.forEach { (it.parent as? ViewGroup)?.removeView(it) }
+        binding.homeModuleGrid.removeAllViews()
         if (twoColumns) {
-            binding.homeModuleGrid.removeAllViews()
+            if (landscape) {
+                binding.homeContent.setPadding(18.dp, 10.dp, 18.dp, 18.dp)
+            }
             cards.chunked(2).forEach { pair ->
                 binding.homeModuleGrid.addView(
                     LinearLayout(requireContext()).apply {
@@ -95,7 +105,7 @@ class HomeFragment : Fragment() {
                                 card,
                                 LinearLayout.LayoutParams(
                                     0,
-                                    116.dp,
+                                    cardHeight,
                                     1f
                                 ).apply {
                                     setMargins(6.dp, 6.dp, 6.dp, 6.dp)
@@ -109,11 +119,29 @@ class HomeFragment : Fragment() {
                     )
                 )
             }
+        } else {
+            cards.forEach { card ->
+                binding.homeModuleGrid.addView(
+                    card,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        cardHeight
+                    ).apply { setMargins(6.dp, 6.dp, 6.dp, 6.dp) }
+                )
+            }
         }
         if (isTelevision) {
             binding.homeTitle.textSize = 26f
             cards.forEach { TvFocus.apply(it, focusedScale = 1.02f) }
             binding.exploreModelsModule.post { binding.exploreModelsModule.requestFocus() }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (_binding != null) {
+            configureInsets(DeviceProfile.isTelevision(requireContext()))
+            configureLayout(DeviceProfile.isTelevision(requireContext()))
         }
     }
 

@@ -1,4 +1,6 @@
 <resources>
     <dimen name="fab_margin">200dp</dimen>
     <dimen name="biology_viewer_height">680dp</dimen>
+    <dimen name="model_card_height">246dp</dimen>
+    <dimen name="model_card_thumbnail_height">120dp</dimen>
 </resources>

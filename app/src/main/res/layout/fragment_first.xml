@@ -456,6 +456,16 @@
                             android:contentDescription="Open full screen"
                             android:drawableStart="@drawable/ic_fullscreen"
                             android:tooltipText="Open full screen" />
+
+                        <TextView
+                            android:id="@+id/viewerMoreButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="More viewer controls"
+                            android:text="MORE"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:tooltipText="More controls"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </HorizontalScrollView>
 
