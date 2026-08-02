@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.indianservers.AIbiology.data.Infographic
 import com.indianservers.AIbiology.data.InfographicDownloadStatus
 import com.indianservers.AIbiology.data.InfographicRepository
+import com.indianservers.AIbiology.data.NetworkAvailability
 import com.indianservers.AIbiology.databinding.DialogInfographicViewerBinding
 import com.indianservers.AIbiology.databinding.FragmentSecondBinding
 import com.indianservers.AIbiology.ui.InfographicAdapter
@@ -143,7 +144,18 @@ class SecondFragment : Fragment() {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
             }
-        if (refreshRemote) repository.refresh(onLoaded) else repository.loadCached(onLoaded)
+        if (refreshRemote && !NetworkAvailability.isInternetAvailable(requireContext())) {
+            Toast.makeText(
+                requireContext(),
+                NetworkAvailability.CATALOG_WARNING,
+                Toast.LENGTH_LONG
+            ).show()
+            repository.loadCached(onLoaded)
+        } else if (refreshRemote) {
+            repository.refresh(onLoaded)
+        } else {
+            repository.loadCached(onLoaded)
+        }
     }
 
     private fun render() {
@@ -237,12 +249,14 @@ class SecondFragment : Fragment() {
             if (_binding == null) return@save
             updateItem(updated)
             when (updated.status) {
-                InfographicDownloadStatus.SAVED ->
+                InfographicDownloadStatus.SAVED -> {
+                    repository.loadThumbnail(updated) {}
                     Toast.makeText(
                         requireContext(),
                         "${updated.title} saved for offline study.",
                         Toast.LENGTH_SHORT
                     ).show()
+                }
                 InfographicDownloadStatus.FAILED ->
                     Toast.makeText(
                         requireContext(),

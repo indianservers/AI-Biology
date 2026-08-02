@@ -17,14 +17,15 @@ class MicroscopyRepository(
     context: Context,
     private val catalogUrl: String
 ) {
-    private val database = MicroscopyDatabase(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val database = MicroscopyDatabase(appContext)
     private val executor = Executors.newFixedThreadPool(3)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val activeThumbnails = ConcurrentHashMap.newKeySet<String>()
     private val thumbnailDirectory =
-        File(context.filesDir, "biology/microscopy/thumbnails").apply { mkdirs() }
+        File(appContext.filesDir, "biology/microscopy/thumbnails").apply { mkdirs() }
     private val preferences =
-        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun refresh(callback: (MicroscopyCatalogResult) -> Unit) {
         executor.execute {
@@ -66,7 +67,11 @@ class MicroscopyRepository(
             return
         }
         val url = slide.thumbnailUrl
-        if (url.isNullOrBlank() || !activeThumbnails.add(slide.id)) {
+        if (
+            url.isNullOrBlank() ||
+            !NetworkAvailability.isInternetAvailable(appContext) ||
+            !activeThumbnails.add(slide.id)
+        ) {
             callback(null)
             return
         }

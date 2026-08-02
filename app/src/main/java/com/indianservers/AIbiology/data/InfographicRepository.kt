@@ -29,7 +29,7 @@ class InfographicRepository(
     private val infographicDirectory =
         File(appContext.filesDir, "biology/infographics").apply { mkdirs() }
     private val thumbnailDirectory =
-        File(appContext.cacheDir, "biology-infographic-thumbnails").apply { mkdirs() }
+        File(appContext.filesDir, "biology/infographics/thumbnails").apply { mkdirs() }
     private val preferences =
         appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
@@ -61,6 +61,17 @@ class InfographicRepository(
         callback: (Infographic) -> Unit
     ) {
         if (activeDownloads.containsKey(infographic.id)) return
+        if (!NetworkAvailability.isInternetAvailable(appContext)) {
+            callbackOnMain(
+                infographic.copy(
+                    status = InfographicDownloadStatus.FAILED,
+                    progress = 0f,
+                    errorMessage = NetworkAvailability.CONTENT_DOWNLOAD_WARNING
+                ),
+                callback
+            )
+            return
+        }
         val queued = infographic.copy(
             status = InfographicDownloadStatus.QUEUED,
             progress = 0f,
@@ -151,7 +162,11 @@ class InfographicRepository(
             return
         }
         val url = infographic.thumbnailUrl
-        if (url.isNullOrBlank() || !activeThumbnails.add(infographic.id)) {
+        if (
+            url.isNullOrBlank() ||
+            !NetworkAvailability.isInternetAvailable(appContext) ||
+            !activeThumbnails.add(infographic.id)
+        ) {
             callback(null)
             return
         }

@@ -20,6 +20,7 @@ import com.indianservers.AIbiology.data.ModelDownloadRecord
 import com.indianservers.AIbiology.data.ModelDownloadStatus
 import com.indianservers.AIbiology.data.ModelRepository
 import com.indianservers.AIbiology.data.ModelSort
+import com.indianservers.AIbiology.data.NetworkAvailability
 import com.indianservers.AIbiology.databinding.SheetModelLibraryBinding
 import java.io.File
 import java.util.concurrent.Executors
@@ -94,8 +95,13 @@ class ModelLibraryBottomSheet(
             addBottomSheetCallback(
                 object : BottomSheetBehavior.BottomSheetCallback() {
                     override fun onStateChanged(bottomSheet: View, newState: Int) {
-                        binding.libraryExpandButton.text =
-                            if (newState == BottomSheetBehavior.STATE_EXPANDED) "v" else "^"
+                        binding.libraryExpandButton.setBackgroundResource(
+                            if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                                R.drawable.control_collapse
+                            } else {
+                                R.drawable.control_expand
+                            }
+                        )
                         binding.libraryExpandButton.contentDescription =
                             if (newState == BottomSheetBehavior.STATE_EXPANDED) {
                                 "Collapse model library"
@@ -275,6 +281,10 @@ class ModelLibraryBottomSheet(
             )
             return
         }
+        if (!NetworkAvailability.isInternetAvailable(context)) {
+            onUnavailable(model, NetworkAvailability.MODEL_DOWNLOAD_WARNING)
+            return
+        }
         repository.download(model, explicitlySaved = true) { record ->
             records[model.id] = record
             adapter.currentList.indexOfFirst { it.id == model.id }
@@ -282,8 +292,14 @@ class ModelLibraryBottomSheet(
                 ?.let(adapter::notifyItemChanged)
             updateStorageSummary()
             if (record.status == com.indianservers.AIbiology.data.ModelDownloadStatus.DOWNLOADED) {
+                requestThumbnail(model) {}
                 onSelected(model)
                 dialog.dismiss()
+            } else if (record.status == ModelDownloadStatus.FAILED) {
+                onUnavailable(
+                    model,
+                    record.errorMessage ?: "Could not download this model."
+                )
             }
         }
     }
@@ -310,11 +326,21 @@ class ModelLibraryBottomSheet(
     }
 
     private fun startDownload(model: BiologyModel) {
+        if (!NetworkAvailability.isInternetAvailable(context)) {
+            onUnavailable(model, NetworkAvailability.MODEL_DOWNLOAD_WARNING)
+            return
+        }
         repository.download(model, explicitlySaved = true) { record ->
             updateRecord(record)
             if (record.status == ModelDownloadStatus.DOWNLOADED) {
+                requestThumbnail(model) {}
                 onSelected(model)
                 dialog.dismiss()
+            } else if (record.status == ModelDownloadStatus.FAILED) {
+                onUnavailable(
+                    model,
+                    record.errorMessage ?: "Could not download this model."
+                )
             }
         }
     }

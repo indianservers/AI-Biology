@@ -188,6 +188,13 @@ class FirstFragment : Fragment() {
                     setLearningMode(ExplorerMode.QUIZ)
                 }
             }
+        } else {
+            // Opening Models is a catalogue-first flow. The cache callback normally opens
+            // the library sooner; this fallback also covers an unavailable or slow cache.
+            binding.root.postDelayed(
+                { openInitialModelLibrary() },
+                MODEL_LIBRARY_OPEN_FALLBACK_MS
+            )
         }
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -654,7 +661,7 @@ class FirstFragment : Fragment() {
         binding.modelSelectorHeader.setCompoundDrawablesWithIntrinsicBounds(
             0,
             0,
-            R.drawable.ic_chevron_up,
+            R.drawable.control_open,
             0
         )
 
@@ -665,7 +672,11 @@ class FirstFragment : Fragment() {
             binding.modelOverviewHeader.setCompoundDrawablesWithIntrinsicBounds(
                 0,
                 0,
-                if (modelOverviewExpanded) R.drawable.ic_chevron_up else R.drawable.ic_chevron_down,
+                if (modelOverviewExpanded) {
+                    R.drawable.control_collapse
+                } else {
+                    R.drawable.control_expand
+                },
                 0
             )
         }
@@ -678,9 +689,9 @@ class FirstFragment : Fragment() {
             binding.infoPanel.visibility = nextVisibility
             val icon =
                 if (partsExpanded) {
-                    R.drawable.ic_chevron_up
+                    R.drawable.control_collapse
                 } else {
-                    R.drawable.ic_chevron_down
+                    R.drawable.control_expand
                 }
             binding.partsHeader.setCompoundDrawablesWithIntrinsicBounds(0, 0, icon, 0)
         }
@@ -1859,8 +1870,41 @@ class FirstFragment : Fragment() {
             isClickable = true
             isFocusable = true
             contentDescription = title
+            applyControlIcon(title)
             setOnClickListener { action() }
         }
+
+    private fun TextView.applyControlIcon(title: String) {
+        val normalized = title.trim().lowercase()
+        when {
+            normalized == "previous" -> {
+                setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.control_previous,
+                    0,
+                    0,
+                    0
+                )
+            }
+            normalized == "next" -> {
+                setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    0,
+                    R.drawable.control_next,
+                    0
+                )
+            }
+            normalized.startsWith("open") || normalized.startsWith("view") -> {
+                setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.control_open,
+                    0,
+                    0,
+                    0
+                )
+            }
+            else -> return
+        }
+        compoundDrawablePadding = 5.dp
+    }
 
     private fun restoreBookmarks() {
         bookmarkedParts.clear()
@@ -2050,6 +2094,7 @@ class FirstFragment : Fragment() {
                     Toast.makeText(requireContext(), result.warning, Toast.LENGTH_LONG).show()
                 }
                 completeCatalogSetup()
+                openInitialModelLibrary()
                 return@loadCached
             }
             val activeId = MODEL_CATALOG.getOrNull(selectedModelIndex)?.id
@@ -2068,13 +2113,25 @@ class FirstFragment : Fragment() {
                 ?: recentModelIndices.firstOrNull()
                 ?: 0
             completeCatalogSetup(selectedModelIndex)
-            if (!hasAutoOpenedModelLibrary) {
-                hasAutoOpenedModelLibrary = true
-                binding.root.post { if (_binding != null) showModelLibrary() }
-            }
+            openInitialModelLibrary()
             result.warning?.let {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private fun openInitialModelLibrary() {
+        if (
+            _binding == null ||
+            !isAdded ||
+            hasAutoOpenedModelLibrary ||
+            arguments?.getBoolean(ARG_OPEN_KNOWLEDGE_CHECK, false) == true
+        ) {
+            return
+        }
+        hasAutoOpenedModelLibrary = true
+        binding.root.post {
+            if (_binding != null && isAdded) showModelLibrary()
         }
     }
 
@@ -2509,7 +2566,9 @@ class FirstFragment : Fragment() {
     }
 
     private fun thumbnailFile(modelIndex: Int): File {
-        val directory = File(requireContext().cacheDir, THUMBNAIL_DIRECTORY).apply { mkdirs() }
+        val directory =
+            File(requireContext().filesDir, "biology/catalog/$THUMBNAIL_DIRECTORY")
+                .apply { mkdirs() }
         return File(directory, "$modelIndex.png")
     }
 
@@ -2958,6 +3017,7 @@ class FirstFragment : Fragment() {
             background = requireContext().getDrawable(
                 if (title == "Done") R.drawable.bg_filter_chip_selected else R.drawable.bg_filter_chip
             )
+            applyControlIcon(title)
             setOnClickListener { action() }
         }
 
@@ -3208,6 +3268,7 @@ class FirstFragment : Fragment() {
             "https://openstax.org/books/biology-2e/pages/4-2-prokaryotic-cells"
         const val MAX_RECENT_MODELS = 5
         const val ARG_OPEN_KNOWLEDGE_CHECK = "open_knowledge_check"
+        const val MODEL_LIBRARY_OPEN_FALLBACK_MS = 350L
         const val FULL_SCREEN_CONTROLS_TIMEOUT_MS = 3_000L
         const val FULL_SCREEN_HINT_TIMEOUT_MS = 4_500L
         const val THUMBNAIL_IMAGE_TAG = "thumbnail_image"

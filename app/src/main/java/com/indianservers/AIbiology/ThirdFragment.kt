@@ -22,6 +22,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.indianservers.AIbiology.data.MicroscopyAnnotation
 import com.indianservers.AIbiology.data.MicroscopyRepository
+import com.indianservers.AIbiology.data.NetworkAvailability
 import com.indianservers.AIbiology.data.MicroscopySlide
 import com.indianservers.AIbiology.databinding.FragmentThirdBinding
 import com.indianservers.AIbiology.ui.DeviceProfile
@@ -224,7 +225,18 @@ class ThirdFragment : Fragment() {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
             }
-        if (refreshRemote) repository.refresh(onLoaded) else repository.loadCached(onLoaded)
+        if (refreshRemote && !NetworkAvailability.isInternetAvailable(requireContext())) {
+            Toast.makeText(
+                requireContext(),
+                NetworkAvailability.CATALOG_WARNING,
+                Toast.LENGTH_LONG
+            ).show()
+            repository.loadCached(onLoaded)
+        } else if (refreshRemote) {
+            repository.refresh(onLoaded)
+        } else {
+            repository.loadCached(onLoaded)
+        }
     }
 
     private fun selectSlide(slide: MicroscopySlide) {

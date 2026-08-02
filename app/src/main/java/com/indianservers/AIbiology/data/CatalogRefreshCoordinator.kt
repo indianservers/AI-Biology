@@ -22,6 +22,11 @@ object CatalogRefreshCoordinator {
     fun refreshAll(context: Context) {
         if (!refreshing.compareAndSet(false, true)) return
         val appContext = context.applicationContext
+        if (!NetworkAvailability.isInternetAvailable(appContext)) {
+            mutableStatus.postValue(CatalogRefreshStatus("OFFLINE READY"))
+            refreshing.set(false)
+            return
+        }
         val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
         mutableStatus.postValue(CatalogRefreshStatus("CHECKING"))
 

@@ -79,6 +79,18 @@ class BiologyModelAdapter(
             binding.modelLearningProgress.progress =
                 (model.learningProgress.coerceIn(0f, 1f) * 100).toInt()
             binding.modelDownloadState.text = stateLabel(model, available, record)
+            binding.modelDownloadState.setCompoundDrawablesWithIntrinsicBounds(
+                if (binding.modelDownloadState.text == "OPEN") R.drawable.control_open else 0,
+                0,
+                0,
+                0
+            )
+            binding.modelDownloadState.compoundDrawablePadding =
+                if (binding.modelDownloadState.text == "OPEN") {
+                    (4 * binding.root.resources.displayMetrics.density).toInt()
+                } else {
+                    0
+                }
             val downloading = record?.status == ModelDownloadStatus.DOWNLOADING ||
                 record?.status == ModelDownloadStatus.QUEUED ||
                 record?.status == ModelDownloadStatus.PAUSED
@@ -191,4 +203,5 @@ class BiologyModelAdapter(
                 else -> "%.0f KB".format(bytes / 1024f)
             }
     }
+
 }

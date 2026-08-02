@@ -83,6 +83,13 @@ class ModelRepository(context: Context) {
             return
         }
         if (!model.packageUrl.isNullOrBlank()) {
+            if (!NetworkAvailability.isInternetAvailable(appContext)) {
+                callbackOnMain(
+                    failedRecord(model, NetworkAvailability.MODEL_DOWNLOAD_WARNING),
+                    callback
+                )
+                return
+            }
             downloadPackage(model, explicitlySaved, callback)
             return
         }
@@ -90,6 +97,13 @@ class ModelRepository(context: Context) {
         if (remoteUrl.isNullOrBlank()) {
             callbackOnMain(
                 failedRecord(model, "No download source is configured for this model."),
+                callback
+            )
+            return
+        }
+        if (!NetworkAvailability.isInternetAvailable(appContext)) {
+            callbackOnMain(
+                failedRecord(model, NetworkAvailability.MODEL_DOWNLOAD_WARNING),
                 callback
             )
             return
@@ -534,7 +548,13 @@ class ModelRepository(context: Context) {
             }
             else -> {
                 partial.delete()
-                val failed = failedRecord(model, error.message ?: "Download failed")
+                val failureMessage =
+                    if (!NetworkAvailability.isInternetAvailable(appContext)) {
+                        NetworkAvailability.MODEL_DOWNLOAD_WARNING
+                    } else {
+                        error.message ?: "Download failed"
+                    }
+                val failed = failedRecord(model, failureMessage)
                     .copy(explicitlySaved = explicitlySaved)
                 database.upsert(failed)
                 callbackOnMain(failed, callback)

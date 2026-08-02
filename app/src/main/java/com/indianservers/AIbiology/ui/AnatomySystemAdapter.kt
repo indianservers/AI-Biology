@@ -60,6 +60,19 @@ class AnatomySystemAdapter(
             binding.anatomySystemTitle.text = model.title
             binding.anatomySystemStatus.text = status(model, download)
             binding.anatomyDownloadButton.text = actionLabel(download)
+            val canOpen = binding.anatomyDownloadButton.text.toString() == "Open"
+            binding.anatomyDownloadButton.setCompoundDrawablesWithIntrinsicBounds(
+                if (canOpen) R.drawable.control_open else 0,
+                0,
+                0,
+                0
+            )
+            binding.anatomyDownloadButton.compoundDrawablePadding =
+                if (canOpen) {
+                    (4 * binding.root.resources.displayMetrics.density).toInt()
+                } else {
+                    0
+                }
             val downloading = download?.status == ModelDownloadStatus.DOWNLOADING ||
                 download?.status == ModelDownloadStatus.QUEUED ||
                 download?.status == ModelDownloadStatus.PAUSED

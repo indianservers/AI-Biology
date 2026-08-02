@@ -86,7 +86,11 @@ class RemoteBiologyCatalogRepository(
             return
         }
         val remoteUrl = model.thumbnailUrl
-        if (remoteUrl.isNullOrBlank() || !activeThumbnails.add(model.id)) {
+        if (
+            remoteUrl.isNullOrBlank() ||
+            !NetworkAvailability.isInternetAvailable(appContext) ||
+            !activeThumbnails.add(model.id)
+        ) {
             callback(null)
             return
         }

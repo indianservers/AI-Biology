@@ -29,6 +29,7 @@ import com.indianservers.AIbiology.data.ModelDownloadRecord
 import com.indianservers.AIbiology.data.ModelDownloadStatus
 import com.indianservers.AIbiology.data.ModelRepository
 import com.indianservers.AIbiology.data.RemoteBiologyCatalogRepository
+import com.indianservers.AIbiology.data.NetworkAvailability
 import com.indianservers.AIbiology.databinding.FragmentFourthBinding
 import com.indianservers.AIbiology.ui.AnatomySystemAdapter
 import com.indianservers.AIbiology.ui.BiologyModelAdapter
@@ -294,7 +295,18 @@ class FourthFragment : Fragment() {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
             }
-        if (refreshRemote) catalogRepository.load(onLoaded) else catalogRepository.loadCached(onLoaded)
+        if (refreshRemote && !NetworkAvailability.isInternetAvailable(requireContext())) {
+            Toast.makeText(
+                requireContext(),
+                NetworkAvailability.CATALOG_WARNING,
+                Toast.LENGTH_LONG
+            ).show()
+            catalogRepository.loadCached(onLoaded)
+        } else if (refreshRemote) {
+            catalogRepository.load(onLoaded)
+        } else {
+            catalogRepository.loadCached(onLoaded)
+        }
     }
 
     private fun renderList() {
@@ -434,6 +446,7 @@ class FourthFragment : Fragment() {
                 updateSelectedActions()
                 when (updated.status) {
                     ModelDownloadStatus.DOWNLOADED -> {
+                        catalogRepository.loadThumbnail(model) {}
                         updated.localFilePath?.let(::File)?.takeIf(File::isFile)?.let {
                             loadModel(model, it)
                         }

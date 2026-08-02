@@ -53,11 +53,11 @@
             android:id="@+id/libraryExpandButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:background="@drawable/control_expand"
+            android:clickable="true"
             android:contentDescription="Expand model library"
-            android:gravity="center"
-            android:text="^"
-            android:textColor="#FFFFFF"
-            android:textSize="22sp" />
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
 
     <EditText

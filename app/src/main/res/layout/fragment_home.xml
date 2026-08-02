@@ -144,10 +144,9 @@
                     <ImageView
                         android:layout_width="64dp"
                         android:layout_height="64dp"
-                        android:background="@drawable/bg_home_icon_3d"
                         android:contentDescription="Interactive 3D models"
-                        android:padding="16dp"
-                        android:src="@drawable/ic_module_3d" />
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/home_module_3d" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -200,10 +199,9 @@
                     <ImageView
                         android:layout_width="64dp"
                         android:layout_height="64dp"
-                        android:background="@drawable/bg_home_icon_anatomy"
                         android:contentDescription="Human anatomy"
-                        android:padding="16dp"
-                        android:src="@drawable/ic_module_anatomy" />
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/home_module_anatomy" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -256,10 +254,9 @@
                     <ImageView
                         android:layout_width="64dp"
                         android:layout_height="64dp"
-                        android:background="@drawable/bg_home_icon_microscope"
                         android:contentDescription="Virtual microscope"
-                        android:padding="16dp"
-                        android:src="@drawable/ic_module_microscope" />
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/home_module_microscope" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -312,10 +309,9 @@
                     <ImageView
                         android:layout_width="64dp"
                         android:layout_height="64dp"
-                        android:background="@drawable/bg_home_icon_library"
                         android:contentDescription="Infographic library"
-                        android:padding="16dp"
-                        android:src="@drawable/ic_module_infographic" />
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/home_module_infographics" />
 
                     <LinearLayout
                         android:layout_width="0dp"
