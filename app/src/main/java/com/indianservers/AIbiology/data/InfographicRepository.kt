@@ -50,6 +50,12 @@ class InfographicRepository(
         }
     }
 
+    fun loadCached(callback: (InfographicCatalogResult) -> Unit) {
+        executor.execute {
+            callbackOnMain(cachedResult(), callback)
+        }
+    }
+
     fun save(
         infographic: Infographic,
         callback: (Infographic) -> Unit

@@ -51,4 +51,22 @@
             android:src="@android:drawable/ic_menu_close_clear_cancel"
             android:tint="#FFFFFF" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/fullInfographicCopyright"
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_global_brand_bar"
+        android:clickable="true"
+        android:contentDescription="Open Indian Servers website"
+        android:ellipsize="end"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:singleLine="true"
+        android:text="@string/indian_servers_copyright"
+        android:textColor="#D6EAF8"
+        android:textSize="9sp" />
 </FrameLayout>

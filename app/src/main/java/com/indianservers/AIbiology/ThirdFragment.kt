@@ -67,7 +67,7 @@ class ThirdFragment : Fragment() {
         configureViewer()
         configureActions()
         configureBackHandling()
-        loadCatalogue()
+        loadCatalogue(refreshRemote = false)
     }
 
     private fun configureInsets() {
@@ -156,7 +156,7 @@ class ThirdFragment : Fragment() {
 
     private fun configureActions() {
         binding.microscopyBack.setOnClickListener { navigateBack() }
-        binding.microscopyRefresh.setOnClickListener { loadCatalogue() }
+        binding.microscopyRefresh.setOnClickListener { loadCatalogue(refreshRemote = true) }
         binding.zoomIn.setOnClickListener { evaluate("zoomBy(1.45)") }
         binding.zoomOut.setOnClickListener { evaluate("zoomBy(0.69)") }
         binding.resetSlide.setOnClickListener { evaluate("resetView()") }
@@ -198,10 +198,11 @@ class ThirdFragment : Fragment() {
         }
     }
 
-    private fun loadCatalogue() {
+    private fun loadCatalogue(refreshRemote: Boolean) {
         showEmpty("Loading virtual lab", "Checking the tissue slide catalogue.", loading = true)
-        repository.refresh { result ->
-            if (_binding == null) return@refresh
+        val onLoaded: (com.indianservers.AIbiology.data.MicroscopyCatalogResult) -> Unit =
+            onLoaded@{ result ->
+            if (_binding == null) return@onLoaded
             slides = result.slides
             adapter.submitList(slides) {
                 if (selectedSlide == null && slides.isNotEmpty()) selectSlide(slides.first())
@@ -222,7 +223,8 @@ class ThirdFragment : Fragment() {
             result.warning?.takeIf { slides.isNotEmpty() }?.let {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
-        }
+            }
+        if (refreshRemote) repository.refresh(onLoaded) else repository.loadCached(onLoaded)
     }
 
     private fun selectSlide(slide: MicroscopySlide) {

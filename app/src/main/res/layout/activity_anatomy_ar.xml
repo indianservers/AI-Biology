@@ -177,9 +177,11 @@
             android:gravity="center_vertical"
             android:shadowColor="#B073E8C5"
             android:shadowRadius="5"
-            android:text="Powered by www.IndianServers.com"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/indian_servers_copyright"
             android:textColor="#D6EAF8"
-            android:textSize="9sp" />
+            android:textSize="8sp" />
 
         <TextView
             android:id="@+id/arPrivacy"

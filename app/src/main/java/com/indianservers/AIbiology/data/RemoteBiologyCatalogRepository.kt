@@ -61,6 +61,13 @@ class RemoteBiologyCatalogRepository(
         }
     }
 
+    fun loadCached(callback: (CatalogLoadResult) -> Unit) {
+        executor.execute {
+            val cached = loadCachedResult()
+            mainHandler.post { callback(cached) }
+        }
+    }
+
     fun seedIfEmpty(models: List<BiologyModel>) {
         if (models.isNotEmpty() && catalogDatabase.all().isEmpty()) {
             catalogDatabase.replaceAll(models)

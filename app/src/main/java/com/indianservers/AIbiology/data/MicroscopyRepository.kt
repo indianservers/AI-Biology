@@ -41,6 +41,13 @@ class MicroscopyRepository(
         }
     }
 
+    fun loadCached(callback: (MicroscopyCatalogResult) -> Unit) {
+        executor.execute {
+            val cached = cachedResult()
+            mainHandler.post { callback(cached) }
+        }
+    }
+
     fun progress(slideId: String): MicroscopyProgress = database.progress(slideId)
 
     fun recordAttempt(

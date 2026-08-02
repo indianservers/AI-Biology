@@ -56,7 +56,7 @@ class SecondFragment : Fragment() {
         configureInsets()
         configureGrid()
         configureActions()
-        loadCatalogue()
+        loadCatalogue(refreshRemote = false)
     }
 
     private fun configureInsets() {
@@ -115,7 +115,7 @@ class SecondFragment : Fragment() {
                 findNavController().navigate(R.id.HomeFragment)
             }
         }
-        binding.libraryRefresh.setOnClickListener { loadCatalogue() }
+        binding.libraryRefresh.setOnClickListener { loadCatalogue(refreshRemote = true) }
         binding.infographicSearch.doAfterTextChanged {
             query = it?.toString().orEmpty().trim()
             render()
@@ -132,16 +132,18 @@ class SecondFragment : Fragment() {
         }
     }
 
-    private fun loadCatalogue() {
+    private fun loadCatalogue(refreshRemote: Boolean) {
         showLoading()
-        repository.refresh { result ->
-            if (_binding == null) return@refresh
+        val onLoaded: (com.indianservers.AIbiology.data.InfographicCatalogResult) -> Unit =
+            onLoaded@{ result ->
+            if (_binding == null) return@onLoaded
             catalogue = result.infographics
             render()
             result.warning?.takeIf { catalogue.isNotEmpty() }?.let {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
-        }
+            }
+        if (refreshRemote) repository.refresh(onLoaded) else repository.loadCached(onLoaded)
     }
 
     private fun render() {
@@ -282,6 +284,10 @@ class SecondFragment : Fragment() {
         val viewer = DialogInfographicViewerBinding.inflate(layoutInflater)
         dialog.setContentView(viewer.root)
         viewer.fullInfographicTitle.text = infographic.title
+        viewer.fullInfographicCopyright.text = AppActions.copyrightNotice(requireContext())
+        viewer.fullInfographicCopyright.setOnClickListener {
+            AppActions.openIndianServers(requireContext())
+        }
         viewer.closeInfographicViewer.setOnClickListener { dialog.dismiss() }
         if (isTelevision) {
             TvFocus.apply(viewer.closeInfographicViewer)

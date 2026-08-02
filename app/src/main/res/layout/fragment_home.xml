@@ -102,6 +102,22 @@
                     android:text="Choose a learning module"
                     android:textColor="#91A6C5"
                     android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/homeKnowledgeCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_filter_chip_selected"
+                    android:clickable="true"
+                    android:contentDescription="Start biology knowledge check"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="Knowledge Check  •  20+ MCQs &amp; Match"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -369,6 +385,15 @@
                     android:textColor="#73E8C5"
                     android:textSize="12sp" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/homeVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Version 1.01"
+                android:textColor="#7187A5"
+                android:textSize="10sp" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

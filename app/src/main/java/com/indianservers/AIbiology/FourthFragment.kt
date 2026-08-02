@@ -76,7 +76,7 @@ class FourthFragment : Fragment() {
         configureViewer()
         configureActions()
         configureBackHandling()
-        loadCatalogue()
+        loadCatalogue(refreshRemote = false)
     }
 
     private fun configureInsets() {
@@ -204,7 +204,7 @@ class FourthFragment : Fragment() {
 
     private fun configureActions() {
         binding.anatomyBack.setOnClickListener { navigateBack() }
-        binding.anatomyRefresh.setOnClickListener { loadCatalogue() }
+        binding.anatomyRefresh.setOnClickListener { loadCatalogue(refreshRemote = true) }
         binding.allAnatomyFilter.setOnClickListener {
             showLibraryOnly = false
             updateFilters()
@@ -260,15 +260,16 @@ class FourthFragment : Fragment() {
         }
     }
 
-    private fun loadCatalogue() {
+    private fun loadCatalogue(refreshRemote: Boolean) {
         records = modelRepository.records().associateBy(ModelDownloadRecord::modelId)
         showEmpty(
             "Loading human anatomy",
             "Checking systems, thumbnails, and your App Library.",
             loading = true
         )
-        catalogRepository.load { result ->
-            if (_binding == null) return@load
+        val onLoaded: (com.indianservers.AIbiology.data.CatalogLoadResult) -> Unit =
+            onLoaded@{ result ->
+            if (_binding == null) return@onLoaded
             catalogue = result.models.filter {
                 it.id.startsWith("ANATOMY_") ||
                     it.id in SHARED_ANATOMY_ORGAN_IDS ||
@@ -292,7 +293,8 @@ class FourthFragment : Fragment() {
             result.warning?.takeIf { catalogue.isNotEmpty() }?.let {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
             }
-        }
+            }
+        if (refreshRemote) catalogRepository.load(onLoaded) else catalogRepository.loadCached(onLoaded)
     }
 
     private fun renderList() {

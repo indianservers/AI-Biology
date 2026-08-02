@@ -12,6 +12,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
+import com.indianservers.AIbiology.data.CatalogRefreshCoordinator
 import com.indianservers.AIbiology.data.ModelDownloadRecord
 import com.indianservers.AIbiology.data.ModelDownloadStatus
 import com.indianservers.AIbiology.data.ModelRepository
@@ -40,6 +41,10 @@ class HomeFragment : Fragment() {
         configureLayout(isTelevision)
         configureActions(isTelevision)
         updateLibrarySummary()
+        binding.homeVersion.text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
+        CatalogRefreshCoordinator.status.observe(viewLifecycleOwner) { status ->
+            binding.homeLibraryStatus.text = status.label
+        }
     }
 
     private fun configureInsets(isTelevision: Boolean) {
@@ -158,7 +163,14 @@ class HomeFragment : Fragment() {
         binding.infographicsModule.setOnClickListener {
             findNavController().navigate(R.id.action_HomeFragment_to_SecondFragment)
         }
+        binding.homeKnowledgeCheck.setOnClickListener {
+            findNavController().navigate(
+                R.id.action_HomeFragment_to_FirstFragment,
+                Bundle().apply { putBoolean(ARG_OPEN_KNOWLEDGE_CHECK, true) }
+            )
+        }
         binding.homeLibraryButton.setOnClickListener { showAppLibrary() }
+        if (isTelevision) TvFocus.apply(binding.homeKnowledgeCheck, focusedScale = 1.02f)
         if (isTelevision) TvFocus.apply(binding.homeLibraryButton, focusedScale = 1.02f)
         if (!isTelevision) binding.homeScroll.isFocusable = false
     }
@@ -274,4 +286,8 @@ class HomeFragment : Fragment() {
 
     private val Int.dp: Int
         get() = (this * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val ARG_OPEN_KNOWLEDGE_CHECK = "open_knowledge_check"
+    }
 }

@@ -6,4 +6,11 @@
     </style>
 
     <style name="Theme.Biology" parent="Base.Theme.Biology" />
+
+    <style name="Theme.Biology.Splash" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowBackground">@drawable/bg_biology_screen</item>
+    </style>
 </resources>

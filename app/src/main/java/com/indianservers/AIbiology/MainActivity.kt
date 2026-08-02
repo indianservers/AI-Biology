@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.contentMain.poweredByLink.text = AppActions.copyrightNotice(this)
         binding.contentMain.poweredByLink.setOnClickListener {
             AppActions.openIndianServers(this)
         }

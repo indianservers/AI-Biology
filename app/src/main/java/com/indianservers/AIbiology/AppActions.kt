@@ -3,8 +3,12 @@ package com.indianservers.AIbiology
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import java.time.Year
 
 object AppActions {
+    fun copyrightNotice(context: Context): String =
+        context.getString(R.string.indian_servers_copyright, Year.now().value)
+
     fun shareApp(context: Context) {
         val playStoreUrl =
             "https://play.google.com/store/apps/details?id=${BuildConfig.APPLICATION_ID}"

@@ -53,7 +53,11 @@ import com.indianservers.AIbiology.databinding.FragmentFirstBinding
 import com.indianservers.AIbiology.data.AnatomyPart
 import com.indianservers.AIbiology.data.BiologyCategories
 import com.indianservers.AIbiology.data.BiologyModel
+import com.indianservers.AIbiology.data.BiologyTheoryCatalog
 import com.indianservers.AIbiology.data.CameraPreset
+import com.indianservers.AIbiology.data.KnowledgeCheckCatalog
+import com.indianservers.AIbiology.data.KnowledgeQuestion
+import com.indianservers.AIbiology.data.KnowledgeQuestionKind
 import com.indianservers.AIbiology.data.ModelPart
 import com.indianservers.AIbiology.data.ModelRepository
 import com.indianservers.AIbiology.data.RemoteBiologyCatalogRepository
@@ -71,7 +75,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 @Suppress("DEPRECATION")
 class FirstFragment : Fragment() {
@@ -103,7 +106,7 @@ class FirstFragment : Fragment() {
     private var quizQuestionIndex = 0
     private var quizScore = 0
     private var quizSelectedAnswer: Int? = null
-    private var quizQuestions = emptyList<QuizQuestion>()
+    private var quizQuestions = emptyList<KnowledgeQuestion>()
     private val quizAwardedQuestions = mutableSetOf<Int>()
     private val bookmarkedParts = mutableSetOf<String>()
     private val bookmarkedModels = mutableSetOf<Int>()
@@ -179,6 +182,13 @@ class FirstFragment : Fragment() {
         configureModelDiscovery()
         loadRemoteCatalog()
         configureLearningModes()
+        if (arguments?.getBoolean(ARG_OPEN_KNOWLEDGE_CHECK, false) == true) {
+            binding.root.post {
+                if (_binding != null) {
+                    setLearningMode(ExplorerMode.QUIZ)
+                }
+            }
+        }
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(false) {
@@ -708,6 +718,8 @@ class FirstFragment : Fragment() {
             toggleModelBookmark(selectedModelIndex)
         }
         binding.compareModelButton.setOnClickListener { showComparisonSelector() }
+        binding.modelKnowMoreButton.setOnClickListener { showModelKnowMore() }
+        binding.partKnowMoreButton.setOnClickListener { showPartKnowMore() }
         binding.sourceAttribution.setOnClickListener {
             val metadata = modelMetadata(MODEL_CATALOG[selectedModelIndex])
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(metadata.sourceUrl)))
@@ -749,6 +761,101 @@ class FirstFragment : Fragment() {
             "Source: ${metadata.sourceTitle}  |  Reviewed $CONTENT_REVIEWED_DATE"
         binding.sourceAttribution.contentDescription =
             "Source ${metadata.sourceTitle}. Last reviewed $CONTENT_REVIEWED_DATE. Open source."
+    }
+
+    private fun showModelKnowMore() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val theory = BiologyTheoryCatalog.forModel(model)
+        showTheorySheet(
+            eyebrow = "ADVANCED CONCEPTS  •  ${model.title}",
+            title = "Know More",
+            introduction = theory.example,
+            sections = listOf(
+                "Go deeper" to theory.knowMore,
+                "Curriculum connections" to theory.syllabusLinks
+            )
+        )
+    }
+
+    private fun showPartKnowMore() {
+        val model = MODEL_CATALOG[selectedModelIndex]
+        val part = model.parts.getOrNull(selectedPartIndex) ?: return
+        showTheorySheet(
+            eyebrow = "${model.title}  •  LABEL ${selectedPartIndex + 1}",
+            title = part.title,
+            introduction = expandedPartTheory(part),
+            sections = listOf(
+                "Connect and apply" to BiologyTheoryCatalog.partKnowMore(
+                    part.title,
+                    part.shortDescription
+                )
+            )
+        )
+    }
+
+    private fun showTheorySheet(
+        eyebrow: String,
+        title: String,
+        introduction: String,
+        sections: List<Pair<String, List<String>>>
+    ) {
+        val dialog = BottomSheetDialog(requireContext())
+        val scroll = android.widget.ScrollView(requireContext())
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 18.dp, 20.dp, 28.dp)
+            background = requireContext().getDrawable(R.drawable.bg_surface_panel)
+        }
+        content.addView(TextView(requireContext()).apply {
+            text = eyebrow
+            setTextColor(readyTextColor)
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        content.addView(TextView(requireContext()).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 25f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 7.dp, 0, 10.dp)
+        })
+        content.addView(TextView(requireContext()).apply {
+            setGlossaryText(this, introduction)
+            setTextColor(bodyTextColor)
+            textSize = if (largerLabels) 19f else 16f
+            setLineSpacing(4.dp.toFloat(), 1f)
+        })
+        sections.forEach { (heading, items) ->
+            content.addView(TextView(requireContext()).apply {
+                text = heading
+                setTextColor(Color.WHITE)
+                textSize = 17f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 18.dp, 0, 5.dp)
+            })
+            items.forEach { item ->
+                content.addView(TextView(requireContext()).apply {
+                    setGlossaryText(this, "•  $item")
+                    setTextColor(bodyTextColor)
+                    textSize = if (largerLabels) 18f else 15f
+                    setLineSpacing(3.dp.toFloat(), 1f)
+                    setPadding(0, 5.dp, 0, 5.dp)
+                })
+            }
+        }
+        content.addView(createSheetAction("Done", true) { dialog.dismiss() }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                48.dp
+            ).apply { topMargin = 20.dp }
+        })
+        scroll.addView(content)
+        dialog.setContentView(scroll)
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
+        dialog.show()
     }
 
     private fun speakTerm(term: String) {
@@ -1274,7 +1381,7 @@ class FirstFragment : Fragment() {
             panel.addView(createWorkflowText(model.title, 24f, Color.WHITE, true, 6))
             panel.addView(
                 createWorkflowText(
-                    "Download this model to unlock its labelled parts and identification quiz.",
+                    "This concept does not yet contain enough reviewed information for a knowledge check.",
                     15f,
                     bodyTextColor,
                     false,
@@ -1304,7 +1411,11 @@ class FirstFragment : Fragment() {
         val header = createSurfacePanel()
         header.addView(
             createWorkflowText(
-                "QUESTION ${quizQuestionIndex + 1} OF ${quizQuestions.size}",
+                if (question.kind == KnowledgeQuestionKind.MATCHING) {
+                    "MATCH THE FOLLOWING • ${quizQuestionIndex + 1} OF ${quizQuestions.size}"
+                } else {
+                    "MCQ • ${quizQuestionIndex + 1} OF ${quizQuestions.size}"
+                },
                 12f,
                 readyTextColor,
                 true
@@ -1394,13 +1505,15 @@ class FirstFragment : Fragment() {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, 14.dp, 0, 0)
             }
-            feedbackActions.addView(
-                createWorkflowAction("View part", primary = false) {
-                    selectPart(question.partIndex, updateViewer = false)
-                    setLearningMode(ExplorerMode.EXPLORE)
-                    selectPart(question.partIndex, updateViewer = true)
-                }
-            )
+            if (question.partIndex in model.parts.indices) {
+                feedbackActions.addView(
+                    createWorkflowAction("View part", primary = false) {
+                        selectPart(question.partIndex, updateViewer = false)
+                        setLearningMode(ExplorerMode.EXPLORE)
+                        selectPart(question.partIndex, updateViewer = true)
+                    }
+                )
+            }
             feedbackActions.addView(
                 createWorkflowAction(
                     if (quizQuestionIndex == quizQuestions.lastIndex) "Results" else "Next",
@@ -1440,9 +1553,9 @@ class FirstFragment : Fragment() {
         result.addView(
             createWorkflowText(
                 when {
-                    percentage >= 80 -> "Excellent work. You can identify the key structures."
-                    percentage >= 60 -> "Good progress. Review the highlighted parts and try again."
-                    else -> "Review the anatomy guide, then take another pass."
+                    percentage >= 80 -> "Excellent work. You understand the key concepts."
+                    percentage >= 60 -> "Good progress. Review the explanations and try again."
+                    else -> "Review the concept guide, then take another pass."
                 },
                 14f,
                 inactiveTextColor,
@@ -1500,34 +1613,7 @@ class FirstFragment : Fragment() {
         quizScore = 0
         quizSelectedAnswer = null
         quizAwardedQuestions.clear()
-        if (model.parts.isEmpty()) {
-            quizQuestions = emptyList()
-            return
-        }
-        val firstPart = selectedPartIndex.coerceIn(model.parts.indices)
-        val partOrder = model.parts.indices.toMutableList().apply {
-            remove(firstPart)
-            add(0, firstPart)
-        }
-        quizQuestions = partOrder.map { partIndex ->
-            val part = model.parts[partIndex]
-            val choices = model.parts
-                .map(AnatomyPart::title)
-                .shuffled(Random(model.fileName.hashCode() + partIndex))
-                .let { shuffled ->
-                    val distractors = shuffled.filterNot { it == part.title }.take(3)
-                    (distractors + part.title).shuffled(
-                        Random(model.fileName.hashCode() * 31 + partIndex)
-                    )
-                }
-            QuizQuestion(
-                prompt = "Which structure matches this function?\n\n${part.description}",
-                choices = choices,
-                correctIndex = choices.indexOf(part.title),
-                explanation = "${part.title}: ${part.description}",
-                partIndex = partIndex
-            )
-        }.take(MAX_QUIZ_QUESTIONS)
+        quizQuestions = KnowledgeCheckCatalog.forConcept(model, MODEL_CATALOG)
     }
 
     private fun renderNotesMode() {
@@ -1882,8 +1968,9 @@ class FirstFragment : Fragment() {
     private fun exploredPartsKey(modelId: String) = "explored_parts_$modelId"
 
     private fun modelOverview(model: BiologyModel): String =
-        MODEL_OVERVIEWS[model.fileName]
-            ?: "${model.title} is explored here as a three-dimensional biological structure."
+        BiologyTheoryCatalog.forModel(model).let { theory ->
+            "${theory.coreTheory}\n\n${theory.example}"
+        }
 
     private fun overviewForLevel(model: BiologyModel): String =
         when (readingLevel) {
@@ -1892,7 +1979,8 @@ class FirstFragment : Fragment() {
                     ?: "${model.title} is a biological structure with parts that work together."
             ReadingLevel.STUDENT -> modelOverview(model)
             ReadingLevel.ADVANCED ->
-                "${modelOverview(model)} ${ADVANCED_CONTEXT[model.fileName] ?: modelFact(model)}"
+                "${modelOverview(model)}\n\nUniversity connection: " +
+                    (ADVANCED_CONTEXT[model.fileName] ?: modelFact(model))
         }
 
     private fun partDescriptionForLevel(part: AnatomyPart): String =
@@ -1904,14 +1992,19 @@ class FirstFragment : Fragment() {
                 .replace("catalyzes", "helps carry out")
                 .replace("hydrophobic", "water-repelling")
                 .replace("lumen", "inner space")
-            ReadingLevel.STUDENT -> part.description
+            ReadingLevel.STUDENT -> expandedPartTheory(part)
             ReadingLevel.ADVANCED -> {
                 val context = ADVANCED_PART_CONTEXT.entries.firstOrNull {
                     part.title.contains(it.key, ignoreCase = true)
                 }?.value ?: "Its molecular organization links structure directly to biological function."
-                "${part.description} $context"
+                "${expandedPartTheory(part)} $context"
             }
         }
+
+    private fun expandedPartTheory(part: AnatomyPart): String =
+        part.detailedDescription
+            ?.takeIf { it.isNotBlank() && it != part.shortDescription }
+            ?: BiologyTheoryCatalog.detailedPartTheory(part.title, part.shortDescription)
 
     private fun modelMetadata(model: BiologyModel): ModelMetadata =
         MODEL_METADATA[model.fileName] ?: ModelMetadata(
@@ -1945,26 +2038,28 @@ class FirstFragment : Fragment() {
             if (catalogReady) renderModelCatalog()
         }
 
-        if (BuildConfig.BIOLOGY_CATALOG_URL.isBlank()) {
-            completeCatalogSetup()
-        } else {
-            showCatalogLoadingState()
-        }
+        // Built-in and saved content is usable immediately; network refresh follows in background.
+        completeCatalogSetup()
     }
 
     private fun loadRemoteCatalog() {
-        remoteCatalogRepository.load { result ->
-            if (_binding == null) return@load
+        remoteCatalogRepository.loadCached { result ->
+            if (_binding == null) return@loadCached
             if (result.models.isEmpty()) {
                 if (BuildConfig.BIOLOGY_CATALOG_URL.isNotBlank() && !result.warning.isNullOrBlank()) {
                     Toast.makeText(requireContext(), result.warning, Toast.LENGTH_LONG).show()
                 }
                 completeCatalogSetup()
-                return@load
+                return@loadCached
             }
             val activeId = MODEL_CATALOG.getOrNull(selectedModelIndex)?.id
+            val mergedModels = buildList {
+                addAll(result.models)
+                val remoteIds = result.models.mapTo(mutableSetOf(), BiologyModel::id)
+                addAll(BUILT_IN_MODEL_CATALOG.filterNot { it.id in remoteIds })
+            }
             MODEL_CATALOG.clear()
-            MODEL_CATALOG.addAll(result.models.map(modelRepository::hydrateInstalledModel))
+            MODEL_CATALOG.addAll(mergedModels.map(modelRepository::hydrateInstalledModel))
             restoreRecentModels()
             restoreBookmarks()
             selectedModelIndex = activeId
@@ -3112,7 +3207,7 @@ class FirstFragment : Fragment() {
         const val OPENSTAX_PROKARYOTIC_CELLS =
             "https://openstax.org/books/biology-2e/pages/4-2-prokaryotic-cells"
         const val MAX_RECENT_MODELS = 5
-        const val MAX_QUIZ_QUESTIONS = 5
+        const val ARG_OPEN_KNOWLEDGE_CHECK = "open_knowledge_check"
         const val FULL_SCREEN_CONTROLS_TIMEOUT_MS = 3_000L
         const val FULL_SCREEN_HINT_TIMEOUT_MS = 4_500L
         const val THUMBNAIL_IMAGE_TAG = "thumbnail_image"
@@ -3140,11 +3235,6 @@ class FirstFragment : Fragment() {
             CameraPreset("left", "LT", "Left"),
             CameraPreset("top", "TOP", "Top"),
             CameraPreset("bottom", "BTM", "Bottom")
-        )
-        val STARTER_MODEL_FILES = setOf(
-            "Bacteriacell.glb",
-            "Neuron.glb",
-            "Vacuole.glb"
         )
         val MODEL_OVERVIEWS = mapOf(
             "Bacteriacell.glb" to
@@ -3297,7 +3387,7 @@ class FirstFragment : Fragment() {
                 nodeNames = listOf(title, semanticId, "BIO_$semanticId"),
                 title = title,
                 shortDescription = description,
-                detailedDescription = description,
+                detailedDescription = BiologyTheoryCatalog.detailedPartTheory(title, description),
                 parentPartId = when (semanticId) {
                     "CAPSULE", "CELL_WALL", "CELL_MEMBRANE" -> "CELL_ENVELOPE"
                     "RIBOSOMES", "NUCLEOID" -> "CYTOPLASM"
@@ -3480,7 +3570,7 @@ class FirstFragment : Fragment() {
                     part("Granules", "In granulocytes, enzyme-filled granules help destroy pathogens.", "0.62 -0.22 0.64")
                 )
             )
-        ).filter { it.fileName in STARTER_MODEL_FILES }
+        )
     }
 }
 
@@ -3490,14 +3580,6 @@ private data class ModelMetadata(
     val pronunciation: String,
     val sourceTitle: String,
     val sourceUrl: String
-)
-
-private data class QuizQuestion(
-    val prompt: String,
-    val choices: List<String>,
-    val correctIndex: Int,
-    val explanation: String,
-    val partIndex: Int
 )
 
 private enum class ExplorerMode(val title: String) {

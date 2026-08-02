@@ -42,8 +42,15 @@
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.Biology">
+        </activity>
+
+        <activity
+            android:name=".SplashActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="true"
+            android:theme="@style/Theme.Biology.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

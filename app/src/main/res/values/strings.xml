@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Biology</string>
+    <string name="app_version">Version %1$s</string>
+    <string name="indian_servers_copyright">© Indian Servers, 2009–%1$d • www.IndianServers.com</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
     <string name="first_fragment_label">Explore</string>

@@ -49,6 +49,7 @@ class AnatomyArActivity : AppCompatActivity() {
         binding.arTitle.text = intent.getStringExtra(EXTRA_MODEL_TITLE) ?: "Human Anatomy"
         binding.arClose.setOnClickListener { finish() }
         binding.arShare.setOnClickListener { AppActions.shareApp(this) }
+        binding.arPoweredBy.text = AppActions.copyrightNotice(this)
         binding.arPoweredBy.setOnClickListener { AppActions.openIndianServers(this) }
         binding.arPrivacy.setOnClickListener {
             startActivity(

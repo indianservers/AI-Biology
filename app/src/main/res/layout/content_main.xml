@@ -43,7 +43,9 @@
             android:shadowDx="0"
             android:shadowDy="0"
             android:shadowRadius="5"
-            android:text="Powered by www.IndianServers.com"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/indian_servers_copyright"
             android:textColor="#D6EAF8"
             android:textSize="9sp" />
 
