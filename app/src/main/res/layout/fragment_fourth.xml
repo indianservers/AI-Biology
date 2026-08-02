@@ -246,6 +246,15 @@
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/anatomyFullscreen"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="View anatomy full screen"
+                    android:drawableStart="@drawable/ic_fullscreen"
+                    android:gravity="center"
+                    android:tooltipText="View full screen" />
+
+                <TextView
                     android:id="@+id/anatomyRotation"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
@@ -299,15 +308,6 @@
                     android:tint="#FFFFFF"
                     android:tooltipText="View in AR"
                     android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/anatomyFullscreen"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:contentDescription="View anatomy full screen"
-                    android:drawableStart="@drawable/ic_fullscreen"
-                    android:gravity="center"
-                    android:tooltipText="View full screen" />
 
             </LinearLayout>
 

@@ -383,6 +383,13 @@
                         android:paddingEnd="5dp">
 
                         <TextView
+                            android:id="@+id/fullScreenButton"
+                            style="@style/BiologyViewerControl"
+                            android:contentDescription="Open full screen"
+                            android:drawableStart="@drawable/ic_fullscreen"
+                            android:tooltipText="Open full screen" />
+
+                        <TextView
                             android:id="@+id/rotateLeftButton"
                             style="@style/BiologyViewerControl"
                             android:contentDescription="Reset model view"
@@ -447,13 +454,6 @@
                             android:textStyle="bold"
                             android:tooltipText="Augmented reality"
                             android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/fullScreenButton"
-                            style="@style/BiologyViewerControl"
-                            android:contentDescription="Open full screen"
-                            android:drawableStart="@drawable/ic_fullscreen"
-                            android:tooltipText="Open full screen" />
 
                         <TextView
                             android:id="@+id/viewerMoreButton"

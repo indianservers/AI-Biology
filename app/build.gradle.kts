@@ -56,7 +56,7 @@ android {
         applicationId = "com.indianservers.AIbiology"
         minSdk = 33
         targetSdk = 36
-        versionCode = 2
+        versionCode = 3
         versionName = "1.01"
         buildConfigField("String", "BIOLOGY_CATALOG_URL", "\"$biologyCatalogUrl\"")
         buildConfigField(
