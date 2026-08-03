@@ -238,7 +238,8 @@
                 android:id="@+id/anatomyViewerControls"
                 android:layout_width="52dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical|end"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="12dp"
                 android:layout_marginEnd="10dp"
                 android:background="@drawable/bg_control_rail"
                 android:orientation="vertical"
@@ -368,17 +369,6 @@
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
-                    <ImageButton
-                        android:id="@+id/anatomyDeleteAction"
-                        android:layout_width="42dp"
-                        android:layout_height="42dp"
-                        android:layout_marginStart="7dp"
-                        android:background="@drawable/bg_filter_chip"
-                        android:contentDescription="Delete anatomy model from App Library"
-                        android:padding="10dp"
-                        android:src="@android:drawable/ic_menu_delete"
-                        android:tint="#FFB2B9"
-                        android:visibility="gone" />
                 </LinearLayout>
 
                 <ProgressBar

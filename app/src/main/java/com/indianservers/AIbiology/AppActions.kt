@@ -6,23 +6,23 @@ import android.net.Uri
 import java.time.Year
 
 object AppActions {
+    private const val PLAY_STORE_URL =
+        "https://play.google.com/store/apps/details?id=com.indianservers.AIbiology"
+
     fun copyrightNotice(context: Context): String =
         context.getString(R.string.indian_servers_copyright, Year.now().value)
 
     fun shareApp(context: Context) {
-        val playStoreUrl =
-            "https://play.google.com/store/apps/details?id=${BuildConfig.APPLICATION_ID}"
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "AI Explorer STEM - Biology")
+            putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_app_subject))
             putExtra(
                 Intent.EXTRA_TEXT,
-                "Explore interactive biology, human anatomy, and virtual microscopy. " +
-                    "Download AI Explorer STEM - Biology: $playStoreUrl"
+                context.getString(R.string.share_app_description, PLAY_STORE_URL)
             )
         }
         context.startActivity(
-            Intent.createChooser(shareIntent, "Share AI Explorer Biology")
+            Intent.createChooser(shareIntent, context.getString(R.string.share_app_chooser))
         )
     }
 

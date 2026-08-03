@@ -10,10 +10,13 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipInputStream
 
 class ModelRepository(context: Context) {
@@ -27,6 +30,7 @@ class ModelRepository(context: Context) {
     private val pauseRequests = ConcurrentHashMap.newKeySet<String>()
     private val cancelRequests = ConcurrentHashMap.newKeySet<String>()
     private val resumeRequests = ConcurrentHashMap.newKeySet<String>()
+    private val closed = AtomicBoolean(false)
     private val modelDirectory = File(appContext.filesDir, "biology/3d").apply { mkdirs() }
     private val transientDirectory = File(appContext.cacheDir, "biology_models").apply { mkdirs() }
 
@@ -69,11 +73,64 @@ class ModelRepository(context: Context) {
 
     fun markOpened(modelId: String) = database.markOpened(modelId)
 
+    /**
+     * Verifies every installed GLB against its binary header, recorded size and
+     * catalogue checksum. Damaged entries are removed and downloaded again
+     * without requiring the user to manually clear the App Library.
+     */
+    fun detectAndRepairDamagedDownloads(
+        models: List<BiologyModel>,
+        callback: (ModelDownloadRecord) -> Unit
+    ) {
+        if (closed.get()) return
+        val modelsById = models.associateBy(BiologyModel::id)
+        executor.execute {
+            records()
+                .filter { it.status == ModelDownloadStatus.DOWNLOADED }
+                .forEach { record ->
+                    val model = modelsById[record.modelId] ?: return@forEach
+                    val file = record.localFilePath?.let(::File)
+                    val expectedChecksum =
+                        model.checksumSha256?.takeIf(String::isNotBlank)
+                            ?: record.checksumSha256?.takeIf(String::isNotBlank)
+                    val valid = runCatching {
+                        file != null &&
+                            isValidGlb(file) &&
+                            (record.fileSizeBytes <= 0L || file.length() == record.fileSizeBytes) &&
+                            (
+                                expectedChecksum == null ||
+                                    sha256(file).equals(expectedChecksum, ignoreCase = true)
+                                )
+                    }.getOrDefault(false)
+                    if (valid || closed.get() || activeDownloads.containsKey(model.id)) {
+                        return@forEach
+                    }
+
+                    file?.delete()
+                    val damaged = record.copy(
+                        localFilePath = null,
+                        fileSizeBytes = model.fileSizeBytes ?: 0L,
+                        status = ModelDownloadStatus.FAILED,
+                        progress = 0f,
+                        errorMessage = "Damaged download detected. Repairing automatically."
+                    )
+                    database.upsert(damaged)
+                    callbackOnMain(damaged, callback)
+                    mainHandler.post {
+                        if (!closed.get()) {
+                            download(model, record.explicitlySaved, callback)
+                        }
+                    }
+                }
+        }
+    }
+
     fun download(
         model: BiologyModel,
         explicitlySaved: Boolean,
         callback: (ModelDownloadRecord) -> Unit
     ) {
+        if (closed.get()) return
         if (activeDownloads.containsKey(model.id)) {
             if (database.get(model.id)?.status == ModelDownloadStatus.PAUSED) {
                 resumeRequests.add(model.id)
@@ -82,10 +139,18 @@ class ModelRepository(context: Context) {
             }
             return
         }
+        // A paused/cancelled task may have completed before the user taps again.
+        // In that case there is no worker left to consume its request flag, and
+        // carrying the flag into a fresh attempt would immediately stop it.
+        pauseRequests.remove(model.id)
+        cancelRequests.remove(model.id)
+        resumeRequests.remove(model.id)
         if (!model.packageUrl.isNullOrBlank()) {
             if (!NetworkAvailability.isInternetAvailable(appContext)) {
-                callbackOnMain(
-                    failedRecord(model, NetworkAvailability.MODEL_DOWNLOAD_WARNING),
+                reportFailure(
+                    model,
+                    explicitlySaved,
+                    NetworkAvailability.MODEL_DOWNLOAD_WARNING,
                     callback
                 )
                 return
@@ -95,15 +160,19 @@ class ModelRepository(context: Context) {
         }
         val remoteUrl = model.glbUrl
         if (remoteUrl.isNullOrBlank()) {
-            callbackOnMain(
-                failedRecord(model, "No download source is configured for this model."),
+            reportFailure(
+                model,
+                explicitlySaved,
+                "No download source is configured for this model.",
                 callback
             )
             return
         }
         if (!NetworkAvailability.isInternetAvailable(appContext)) {
-            callbackOnMain(
-                failedRecord(model, NetworkAvailability.MODEL_DOWNLOAD_WARNING),
+            reportFailure(
+                model,
+                explicitlySaved,
+                NetworkAvailability.MODEL_DOWNLOAD_WARNING,
                 callback
             )
             return
@@ -116,7 +185,7 @@ class ModelRepository(context: Context) {
         database.upsert(queued)
         callbackOnMain(queued, callback)
 
-        activeDownloads[model.id] = executor.submit {
+        submitDownload(model, explicitlySaved, callback) {
             val target = File(modelDirectory, model.fileName)
             val partial = File(modelDirectory, "${model.fileName}.part")
             var connection: HttpURLConnection? = null
@@ -192,9 +261,7 @@ class ModelRepository(context: Context) {
                 handleStoppedDownload(model, explicitlySaved, partial, error, callback)
             } finally {
                 connection?.disconnect()
-                activeDownloads.remove(model.id)
                 activeConnections.remove(model.id)
-                resumeAfterStopIfRequested(model, explicitlySaved, callback)
             }
         }
     }
@@ -258,12 +325,25 @@ class ModelRepository(context: Context) {
     }
 
     fun close() {
-        pauseRequests.addAll(activeDownloads.keys)
+        if (!closed.compareAndSet(false, true)) return
+        val activeModelIds = activeDownloads.keys.toList()
+        resumeRequests.clear()
+        pauseRequests.addAll(activeModelIds)
         activeConnections.values.forEach(HttpURLConnection::disconnect)
         activeConnections.clear()
         activeDownloads.values.forEach { it.cancel(true) }
         executor.shutdownNow()
         runCatching { executor.awaitTermination(1, TimeUnit.SECONDS) }
+        activeModelIds.forEach { modelId ->
+            database.get(modelId)
+                ?.takeIf {
+                    it.status == ModelDownloadStatus.QUEUED ||
+                        it.status == ModelDownloadStatus.DOWNLOADING
+                }
+                ?.copy(status = ModelDownloadStatus.PAUSED, errorMessage = null)
+                ?.let(database::upsert)
+        }
+        mainHandler.removeCallbacksAndMessages(null)
         database.close()
         installedMetadata.close()
     }
@@ -282,7 +362,7 @@ class ModelRepository(context: Context) {
         database.upsert(queued)
         callbackOnMain(queued, callback)
 
-        activeDownloads[model.id] = executor.submit {
+        submitDownload(model, explicitlySaved, callback) {
             val safeId = model.id.lowercase().replace(Regex("[^a-z0-9._-]"), "_")
             val partial = File(modelDirectory, "$safeId.package.part")
             val extractionDirectory = File(modelDirectory, ".$safeId-extract")
@@ -381,9 +461,44 @@ class ModelRepository(context: Context) {
                     ensureManagedDirectory(extractionDirectory)
                     extractionDirectory.deleteRecursively()
                 }
-                activeDownloads.remove(model.id)
                 activeConnections.remove(model.id)
+            }
+        }
+    }
+
+    /**
+     * Registers a task before it can start and always unregisters it from
+     * FutureTask.done(). Unlike a worker-body finally block, done() also runs
+     * when a queued task is cancelled before its body ever starts.
+     */
+    private fun submitDownload(
+        model: BiologyModel,
+        explicitlySaved: Boolean,
+        callback: (ModelDownloadRecord) -> Unit,
+        task: () -> Unit
+    ) {
+        lateinit var future: FutureTask<Unit>
+        future = object : FutureTask<Unit>(Callable {
+            task()
+            Unit
+        }) {
+            override fun done() {
+                activeDownloads.remove(model.id, this)
                 resumeAfterStopIfRequested(model, explicitlySaved, callback)
+            }
+        }
+        if (activeDownloads.putIfAbsent(model.id, future) != null) return
+        try {
+            executor.execute(future)
+        } catch (error: RuntimeException) {
+            activeDownloads.remove(model.id, future)
+            if (!closed.get()) {
+                reportFailure(
+                    model,
+                    explicitlySaved,
+                    error.message ?: "Could not start the model download.",
+                    callback
+                )
             }
         }
     }
@@ -506,11 +621,13 @@ class ModelRepository(context: Context) {
     ) {
         if (!resumeRequests.remove(model.id)) return
         pauseRequests.remove(model.id)
+        if (closed.get()) return
         mainHandler.post { download(model, explicitlySaved, callback) }
     }
 
     private fun checkDownloadStillActive(modelId: String) {
-        if (Thread.currentThread().isInterrupted ||
+        if (closed.get() ||
+            Thread.currentThread().isInterrupted ||
             modelId in pauseRequests ||
             modelId in cancelRequests
         ) {
@@ -525,6 +642,7 @@ class ModelRepository(context: Context) {
         error: Exception,
         callback: (ModelDownloadRecord) -> Unit
     ) {
+        if (closed.get()) return
         when {
             cancelRequests.remove(model.id) -> {
                 partial.delete()
@@ -590,6 +708,7 @@ class ModelRepository(context: Context) {
                     FileOutputStream(target).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         while (true) {
+                            checkDownloadStillActive(modelId)
                             val count = zip.read(buffer)
                             if (count < 0) break
                             extractedBytes += count
@@ -663,11 +782,33 @@ class ModelRepository(context: Context) {
             errorMessage = message
         )
 
+    private fun reportFailure(
+        model: BiologyModel,
+        explicitlySaved: Boolean,
+        message: String,
+        callback: (ModelDownloadRecord) -> Unit
+    ) {
+        val failed = failedRecord(model, message).copy(explicitlySaved = explicitlySaved)
+        database.upsert(failed)
+        callbackOnMain(failed, callback)
+    }
+
     private fun callbackOnMain(
         record: ModelDownloadRecord,
         callback: (ModelDownloadRecord) -> Unit
     ) {
-        mainHandler.post { callback(record) }
+        if (closed.get()) return
+        mainHandler.post {
+            if (closed.get()) return@post
+            val current = database.get(record.modelId)
+            val isCurrent =
+                if (record.status == ModelDownloadStatus.NOT_DOWNLOADED) {
+                    current == null
+                } else {
+                    current?.status == record.status
+                }
+            if (isCurrent) callback(record)
+        }
     }
 
     companion object {
@@ -677,11 +818,22 @@ class ModelRepository(context: Context) {
         fun isValidGlb(file: File): Boolean {
             if (!file.isFile || file.length() < 20) return false
             return FileInputStream(file).use { input ->
-                val magic = ByteArray(4)
-                input.read(magic) == 4 &&
-                    magic.contentEquals(byteArrayOf(0x67, 0x6c, 0x54, 0x46))
+                val header = ByteArray(12)
+                if (input.read(header) != header.size) return@use false
+                val magicMatches =
+                    header.copyOfRange(0, 4)
+                        .contentEquals(byteArrayOf(0x67, 0x6c, 0x54, 0x46))
+                val version = littleEndianUnsignedInt(header, 4)
+                val declaredLength = littleEndianUnsignedInt(header, 8)
+                magicMatches && version == 2L && declaredLength == file.length()
             }
         }
+
+        private fun littleEndianUnsignedInt(bytes: ByteArray, offset: Int): Long =
+            (bytes[offset].toLong() and 0xffL) or
+                ((bytes[offset + 1].toLong() and 0xffL) shl 8) or
+                ((bytes[offset + 2].toLong() and 0xffL) shl 16) or
+                ((bytes[offset + 3].toLong() and 0xffL) shl 24)
 
         fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")

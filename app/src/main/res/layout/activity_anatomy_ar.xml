@@ -19,7 +19,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_margin="12dp"
-        android:background="@drawable/bg_info_panel"
+        android:background="@drawable/bg_ar_overlay"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:padding="8dp"
@@ -59,10 +59,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:maxLines="1"
+                android:maxLines="2"
                 android:text="Starting AR tracking..."
                 android:textColor="#73E8C5"
-                android:textSize="10sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
         <ImageButton
@@ -76,82 +76,242 @@
             android:tint="#73E8C5" />
     </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/arControls"
+    <TextView
+        android:id="@+id/arPlacementIndicator"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_ar_indicator_pending"
+        android:contentDescription="Aim at a surface to place the model"
+        android:gravity="center"
+        android:text="+"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="@id/arSceneView"
+        app:layout_constraintEnd_toEndOf="@id/arSceneView"
+        app:layout_constraintStart_toStartOf="@id/arSceneView"
+        app:layout_constraintTop_toTopOf="@id/arSceneView" />
+
+    <TextView
+        android:id="@+id/arPlacementHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_ar_overlay"
+        android:paddingStart="12dp"
+        android:paddingTop="5dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="5dp"
+        android:text="AUTO SURFACE"
+        android:textColor="#D6EAF8"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="@id/arPlacementIndicator"
+        app:layout_constraintStart_toStartOf="@id/arPlacementIndicator"
+        app:layout_constraintTop_toBottomOf="@id/arPlacementIndicator" />
+
+    <LinearLayout
+        android:id="@+id/arControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
         android:layout_marginBottom="14dp"
-        android:background="@drawable/bg_info_panel"
+        android:background="@drawable/bg_ar_overlay"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="8dp"
         app:layout_constraintBottom_toTopOf="@id/arBrandBar"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
         <TextView
+            android:id="@+id/arRotationLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ROTATE"
+            android:text="ROTATE · 15° STEP"
             android:textColor="#A9BBD4"
-            android:textSize="9sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
             <Button
                 android:id="@+id/rotateX"
-                style="@style/BiologyViewerControl"
-                android:layout_width="48dp"
-                android:layout_height="42dp"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
                 android:text="X" />
 
             <Button
                 android:id="@+id/rotateY"
-                style="@style/BiologyViewerControl"
-                android:layout_width="48dp"
-                android:layout_height="42dp"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
                 android:text="Y" />
 
             <Button
                 android:id="@+id/rotateZ"
-                style="@style/BiologyViewerControl"
-                android:layout_width="48dp"
-                android:layout_height="42dp"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
                 android:text="Z" />
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
             <Button
                 android:id="@+id/arSmaller"
-                style="@style/BiologyViewerControl"
-                android:layout_width="48dp"
-                android:layout_height="42dp"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
                 android:contentDescription="Make model smaller"
                 android:text="-" />
 
             <Button
                 android:id="@+id/arRecenter"
-                style="@style/BiologyViewerControl"
-                android:layout_width="86dp"
-                android:layout_height="42dp"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
                 android:text="Recenter" />
 
             <Button
                 android:id="@+id/arLarger"
-                style="@style/BiologyViewerControl"
-                android:layout_width="48dp"
-                android:layout_height="42dp"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
                 android:contentDescription="Make model larger"
                 android:text="+" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/arScaleLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="SCALE · 100%"
+            android:textColor="#73E8C5"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/arPlaceNow"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Place" />
+
+            <Button
+                android:id="@+id/arActualSize"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Actual size" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/arResetPose"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Reset pose" />
+
+            <Button
+                android:id="@+id/arLockModel"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Lock" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/arRotationStep"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Step 15°" />
+
+            <Button
+                android:id="@+id/arToggleModel"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Hide" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/arPlacementMode"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Mode: Auto" />
+
+            <Button
+                android:id="@+id/arMeasure"
+                style="@style/BiologyArControl"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Measure" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/arMeasurementLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:textColor="#73E8C5"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/arHelp"
+            style="@style/BiologyArControl"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="AR help &amp; tips" />
     </LinearLayout>
 
     <LinearLayout
@@ -181,7 +341,7 @@
             android:singleLine="true"
             android:text="@string/indian_servers_copyright"
             android:textColor="#D6EAF8"
-            android:textSize="8sp" />
+            android:textSize="10sp" />
 
         <TextView
             android:id="@+id/arPrivacy"
@@ -193,6 +353,6 @@
             android:gravity="center_vertical"
             android:text="ARCore Privacy"
             android:textColor="#8FA6C5"
-            android:textSize="9sp" />
+            android:textSize="10sp" />
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

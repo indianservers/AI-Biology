@@ -30,12 +30,15 @@ import com.indianservers.AIbiology.data.ModelDownloadStatus
 import com.indianservers.AIbiology.data.ModelRepository
 import com.indianservers.AIbiology.data.RemoteBiologyCatalogRepository
 import com.indianservers.AIbiology.data.NetworkAvailability
+import com.indianservers.AIbiology.data.RecentlyViewedStore
+import com.indianservers.AIbiology.data.RenderQualityProfile
 import com.indianservers.AIbiology.databinding.FragmentFourthBinding
 import com.indianservers.AIbiology.ui.AnatomySystemAdapter
 import com.indianservers.AIbiology.ui.BiologyModelAdapter
 import com.indianservers.AIbiology.ui.DeviceProfile
 import com.indianservers.AIbiology.ui.TvFocus
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 
@@ -45,6 +48,7 @@ class FourthFragment : Fragment() {
     private lateinit var catalogRepository: RemoteBiologyCatalogRepository
     private lateinit var modelRepository: ModelRepository
     private lateinit var adapter: AnatomySystemAdapter
+    private lateinit var recentlyViewedStore: RecentlyViewedStore
     private var catalogue = emptyList<BiologyModel>()
     private var records = emptyMap<String, ModelDownloadRecord>()
     private var selectedModel: BiologyModel? = null
@@ -53,6 +57,7 @@ class FourthFragment : Fragment() {
     private var isFullscreen = false
     private var isTelevision = false
     private var viewerFile: File? = null
+    private var integrityAuditStarted = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -67,6 +72,7 @@ class FourthFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         isTelevision = DeviceProfile.isTelevision(requireContext())
         modelRepository = ModelRepository(requireContext())
+        recentlyViewedStore = RecentlyViewedStore(requireContext())
         catalogRepository = RemoteBiologyCatalogRepository(
             requireContext(),
             BuildConfig.BIOLOGY_ANATOMY_CATALOG_URL,
@@ -140,7 +146,6 @@ class FourthFragment : Fragment() {
                 binding.anatomyFullscreen,
                 binding.anatomyAr,
                 binding.anatomyDownloadAction,
-                binding.anatomyDeleteAction,
                 binding.closeAnatomyFullscreen
             ).forEach { TvFocus.apply(it, 1.03f) }
             TvFocus.apply(binding.anatomyWebView, 1.01f)
@@ -232,9 +237,6 @@ class FourthFragment : Fragment() {
         binding.anatomyDownloadAction.setOnClickListener {
             selectedModel?.let(::downloadModel)
         }
-        binding.anatomyDeleteAction.setOnClickListener {
-            selectedModel?.let(::confirmDelete)
-        }
     }
 
     private fun configureBackHandling() {
@@ -289,7 +291,25 @@ class FourthFragment : Fragment() {
                     loading = false
                 )
             } else if (selectedModel == null) {
-                selectModel(catalogue.first())
+                val requestedId = arguments?.getString(RecentlyViewedStore.ARG_MODEL_ID)
+                selectModel(catalogue.firstOrNull { it.id == requestedId } ?: catalogue.first())
+            }
+            if (!integrityAuditStarted && catalogue.isNotEmpty()) {
+                integrityAuditStarted = true
+                modelRepository.detectAndRepairDamagedDownloads(catalogue) { repaired ->
+                    if (_binding == null) return@detectAndRepairDamagedDownloads
+                    records = records + (repaired.modelId to repaired)
+                    adapter.notifyDataSetChanged()
+                    updateSelectedActions()
+                    if (
+                        repaired.status == ModelDownloadStatus.DOWNLOADED &&
+                        selectedModel?.id == repaired.modelId
+                    ) {
+                        repaired.localFilePath?.let(::File)?.takeIf(File::isFile)?.let {
+                            loadModel(selectedModel ?: return@detectAndRepairDamagedDownloads, it)
+                        }
+                    }
+                }
             }
             result.warning?.takeIf { catalogue.isNotEmpty() }?.let {
                 Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
@@ -337,6 +357,7 @@ class FourthFragment : Fragment() {
 
     private fun selectModel(model: BiologyModel) {
         selectedModel = model
+        recentlyViewedStore.record(model, RecentlyViewedStore.DESTINATION_ANATOMY)
         adapter.selectedId = model.id
         binding.anatomyDetailPanel.visibility = View.VISIBLE
         binding.selectedAnatomyTitle.text = model.title
@@ -395,6 +416,20 @@ class FourthFragment : Fragment() {
         binding.anatomyLoading.visibility = View.VISIBLE
         binding.anatomyEmptyTitle.text = "Preparing ${model.title}"
         binding.anatomyEmptyMessage.text = "Loading the downloaded 3D anatomy model."
+        val partsJson = JSONArray().apply {
+            model.parts.forEach { part ->
+                put(
+                    JSONObject()
+                        .put("title", part.title)
+                        .put("position", part.position)
+                        .put("normal", part.normal)
+                        .put(
+                            "autoAnchor",
+                            part.position.trim().replace(Regex("\\s+"), " ") == "0 0 0"
+                        )
+                )
+            }
+        }.toString()
         val url = Uri.parse("file:///android_asset/model_viewer.html")
             .buildUpon()
             .appendQueryParameter(
@@ -402,10 +437,14 @@ class FourthFragment : Fragment() {
                 "https://$MODEL_HOST/models/${Uri.encode(file.name)}"
             )
             .appendQueryParameter("title", model.title)
-            .appendQueryParameter("parts", JSONArray().toString())
-            .appendQueryParameter("identifyMode", "0")
+            .appendQueryParameter("parts", partsJson)
+            .appendQueryParameter("identifyMode", "1")
             .appendQueryParameter("showAllLabels", "0")
             .appendQueryParameter("modelIndex", "-1")
+            .appendQueryParameter(
+                "quality",
+                RenderQualityProfile.forDevice(requireContext()).queryValue
+            )
             .build()
             .toString()
         binding.anatomyWebView.loadUrl(url)
@@ -467,24 +506,6 @@ class FourthFragment : Fragment() {
         }
     }
 
-    private fun confirmDelete(model: BiologyModel) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Delete ${model.title}?")
-            .setMessage(
-                "The downloaded model will be removed from this device. " +
-                    "Its catalogue card remains available for downloading again."
-            )
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Delete") { _, _ ->
-                modelRepository.remove(model.id, requireExplicitConfirmation = false)
-                records = modelRepository.records().associateBy(ModelDownloadRecord::modelId)
-                adapter.notifyDataSetChanged()
-                selectModel(model)
-                renderList()
-            }
-            .show()
-    }
-
     private fun updateSelectedActions() {
         val model = selectedModel ?: return
         val record = records[model.id]
@@ -492,9 +513,10 @@ class FourthFragment : Fragment() {
         val downloading = record?.status == ModelDownloadStatus.DOWNLOADING ||
             record?.status == ModelDownloadStatus.QUEUED ||
             record?.status == ModelDownloadStatus.PAUSED
-        binding.anatomyDeleteAction.visibility = if (downloaded) View.VISIBLE else View.GONE
         binding.anatomyAr.visibility =
             if (downloaded && !isTelevision) View.VISIBLE else View.GONE
+        binding.anatomyDownloadAction.visibility =
+            if (downloaded) View.GONE else View.VISIBLE
         binding.anatomyDownloadAction.isEnabled = !downloaded
         binding.anatomyDownloadAction.alpha =
             if (binding.anatomyDownloadAction.isEnabled) 1f else 0.65f
@@ -555,7 +577,9 @@ class FourthFragment : Fragment() {
     private fun realWorldSizeMeters(title: String): Float {
         val normalized = title.lowercase()
         return when {
-            "skeleton" in normalized || "human body" in normalized -> 1.72f
+            "skeleton" in normalized ||
+                "human body" in normalized ||
+                "system" in normalized -> 1.72f
             "lung" in normalized -> 0.28f
             "liver" in normalized -> 0.24f
             "brain" in normalized -> 0.17f
@@ -664,7 +688,16 @@ class FourthFragment : Fragment() {
         }
 
         @JavascriptInterface
-        fun onPartSelected(index: Int) = Unit
+        fun onPartSelected(index: Int) {
+            activity?.runOnUiThread {
+                val part = selectedModel?.parts?.getOrNull(index) ?: return@runOnUiThread
+                AlertDialog.Builder(requireContext())
+                    .setTitle(part.title)
+                    .setMessage(part.detailedDescription ?: part.shortDescription)
+                    .setPositiveButton("Done", null)
+                    .show()
+            }
+        }
 
         @JavascriptInterface
         fun onSurfaceAnchorsReady(modelIndex: Int, anchorsJson: String) = Unit

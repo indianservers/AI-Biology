@@ -61,6 +61,8 @@ import com.indianservers.AIbiology.data.KnowledgeQuestionKind
 import com.indianservers.AIbiology.data.ModelPart
 import com.indianservers.AIbiology.data.ModelRepository
 import com.indianservers.AIbiology.data.RemoteBiologyCatalogRepository
+import com.indianservers.AIbiology.data.RecentlyViewedStore
+import com.indianservers.AIbiology.data.RenderQualityProfile
 import com.indianservers.AIbiology.ui.ModelLibraryBottomSheet
 import com.indianservers.AIbiology.ui.DeviceProfile
 import com.indianservers.AIbiology.ui.TvFocus
@@ -139,6 +141,8 @@ class FirstFragment : Fragment() {
     private lateinit var modelStorageDirectory: File
     private lateinit var modelRepository: ModelRepository
     private lateinit var remoteCatalogRepository: RemoteBiologyCatalogRepository
+    private lateinit var recentlyViewedStore: RecentlyViewedStore
+    private var integrityAuditStarted = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -155,6 +159,7 @@ class FirstFragment : Fragment() {
         modelStorageDirectory = File(requireContext().filesDir, MODEL_ASSET_DIRECTORY)
         isTelevision = DeviceProfile.isTelevision(requireContext())
         modelRepository = ModelRepository(requireContext())
+        recentlyViewedStore = RecentlyViewedStore(requireContext())
         remoteCatalogRepository = RemoteBiologyCatalogRepository(
             requireContext(),
             BuildConfig.BIOLOGY_CATALOG_URL
@@ -2126,6 +2131,7 @@ class FirstFragment : Fragment() {
             !isAdded ||
             hasAutoOpenedModelLibrary ||
             arguments?.getBoolean(ARG_OPEN_KNOWLEDGE_CHECK, false) == true
+                || arguments?.containsKey(RecentlyViewedStore.ARG_MODEL_ID) == true
         ) {
             return
         }
@@ -2161,12 +2167,33 @@ class FirstFragment : Fragment() {
         catalogReady = true
         restoreRecentModels()
         restoreBookmarks()
-        val index = preferredIndex
+        val requestedModelId = arguments?.getString(RecentlyViewedStore.ARG_MODEL_ID)
+        val requestedIndex = requestedModelId
+            ?.let { id -> MODEL_CATALOG.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+        val index = requestedIndex
+            ?: preferredIndex
             ?.takeIf { it in MODEL_CATALOG.indices }
             ?: recentModelIndices.firstOrNull()
             ?: 0
         renderModelCatalog()
         selectModel(index)
+        if (!integrityAuditStarted) {
+            integrityAuditStarted = true
+            modelRepository.detectAndRepairDamagedDownloads(MODEL_CATALOG) { record ->
+                if (_binding == null) return@detectAndRepairDamagedDownloads
+                renderModelCatalog()
+                if (MODEL_CATALOG.getOrNull(selectedModelIndex)?.id == record.modelId) {
+                    when (record.status) {
+                        com.indianservers.AIbiology.data.ModelDownloadStatus.DOWNLOADED ->
+                            loadModel(MODEL_CATALOG[selectedModelIndex])
+                        com.indianservers.AIbiology.data.ModelDownloadStatus.FAILED ->
+                            showViewerError(record.errorMessage.orEmpty())
+                        else -> Unit
+                    }
+                }
+            }
+        }
     }
 
     private fun restoreRecentModels() {
@@ -2478,6 +2505,7 @@ class FirstFragment : Fragment() {
         val model = MODEL_CATALOG[index]
 
         addRecentModel(index)
+        recentlyViewedStore.record(model, RecentlyViewedStore.DESTINATION_MODELS)
         updateModelSelectionStyles()
         configurePartList(model)
         selectPart(0, updateViewer = false)
@@ -3090,6 +3118,11 @@ class FirstFragment : Fragment() {
             append("&highContrast=${if (highContrast) 1 else 0}")
             append("&largerLabels=${if (largerLabels) 1 else 0}")
             append("&screenReader=${if (screenReaderMode) 1 else 0}")
+            append(
+                "&quality=${
+                    RenderQualityProfile.forDevice(requireContext()).queryValue
+                }"
+            )
         }
         binding.modelWebView.loadUrl(query)
     }

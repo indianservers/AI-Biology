@@ -1,8 +1,19 @@
 <resources>
     <string name="app_name">Biology</string>
     <string name="app_version">Version %1$s</string>
+    <string name="share_app">Share app</string>
+    <string name="share_app_subject">AI Explorer STEM - Biology</string>
+    <string name="share_app_chooser">Share AI Explorer Biology</string>
+    <string name="share_app_description">Explore biology through interactive 3D models, human anatomy, virtual microscopy, infographics, and knowledge checks with AI Explorer STEM - Biology.\n\nDownload the app: %1$s</string>
     <string name="indian_servers_copyright">© Indian Servers, 2009–%1$d • www.IndianServers.com</string>
-    <string name="action_settings">Settings</string>
+    <string name="about">About</string>
+    <string name="open_app_menu">Open app menu</string>
+    <string name="about_title">About AI Explorer STEM - Biology</string>
+    <string name="about_description">Explore biology through interactive 3D models, human anatomy, virtual microscopy, infographics, and knowledge checks.</string>
+    <string name="about_disclaimer_title">3D model disclaimer</string>
+    <string name="about_disclaimer">The 3D models are educational visualizations and were not all created by Indian Servers Pvt Ltd. They may be simplified and are not guaranteed to be anatomically, biologically, or dimensionally exact. They are for learning only and are not a substitute for professional medical advice.</string>
+    <string name="about_copyright">Copyright &#169; 2009&#8211;%1$d Indian Servers Pvt Ltd. All rights reserved.</string>
+    <string name="about_contact">Contact: info@indianservers.com</string>
     <!-- Strings used for fragments for navigation -->
     <string name="first_fragment_label">Explore</string>
     <string name="second_fragment_label">Library</string>

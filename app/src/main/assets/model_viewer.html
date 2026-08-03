@@ -106,6 +106,11 @@
             height: 100%;
             overflow: visible;
             pointer-events: none;
+            transition: opacity 80ms linear;
+        }
+
+        body.camera-interacting #leader-lines {
+            opacity: 0;
         }
 
         #leader-lines line {
@@ -174,6 +179,7 @@
     const missing = params.get("missing") === "1";
     const modelIndex = Number(params.get("modelIndex") || "-1");
     const rotationSpeed = Number(params.get("rotationSpeed") || "18");
+    const requestedQuality = params.get("quality") || "balanced";
     let identifyMode = params.get("identifyMode") !== "0";
     let showAllLabels = params.get("showAllLabels") === "1";
     let reducedMotion = params.get("reducedMotion") === "1";
@@ -186,10 +192,38 @@
     let parts = [];
     let initialCameraRadius = 0;
     let lastCameraUpdate = 0;
+    let lastHotspotLayout = 0;
+    let settledCameraTimer = null;
+    let lastReportedZoom = -1;
+    let lastReportedOrientation = "";
+    const activePointers = new Set();
+    let multiTouchGesture = false;
     let pointerStart = null;
     let lastTapAt = 0;
     let pendingTap = null;
     let selectedPartIndex = -1;
+    let zoomGoalRadius = 0;
+    let zoomAnimationFrame = 0;
+    let performanceSampleStartedAt = 0;
+    let performanceSampleFrames = 0;
+
+    customElements.whenDefined("model-viewer").then(() => {
+        const ModelViewer = customElements.get("model-viewer");
+        if (ModelViewer) {
+            ModelViewer.minimumRenderScale =
+                requestedQuality === "low" ? 0.35 :
+                requestedQuality === "high" ? 0.7 :
+                0.5;
+        }
+        viewer.shadowIntensity =
+            requestedQuality === "low" ? 0 :
+            requestedQuality === "high" ? 0.7 :
+            0.4;
+        viewer.interpolationDecay =
+            requestedQuality === "low" ? 28 :
+            requestedQuality === "high" ? 42 :
+            34;
+    });
 
     applyAccessibilityClasses();
 
@@ -221,6 +255,7 @@
         captureThumbnail();
         message.style.display = "none";
         notifyModelState("loaded", "");
+        monitorRenderingPerformance();
         requestAnimationFrame(() => {
             requestAnimationFrame(resolveSurfaceAnchors);
         });
@@ -241,11 +276,29 @@
 
     viewer.addEventListener("camera-change", () => {
         const now = Date.now();
-        if (now - lastCameraUpdate < 180) return;
-        lastCameraUpdate = now;
-        reportCameraState();
-        layoutHotspotLabels();
+        if (activePointers.size > 0) {
+            scheduleSettledCameraWork();
+            return;
+        }
+        if (now - lastCameraUpdate >= 240) {
+            lastCameraUpdate = now;
+            reportCameraState();
+        }
+        if (now - lastHotspotLayout >= 400) {
+            lastHotspotLayout = now;
+            requestAnimationFrame(layoutHotspotLabels);
+        }
     });
+
+    function scheduleSettledCameraWork() {
+        if (settledCameraTimer) clearTimeout(settledCameraTimer);
+        settledCameraTimer = setTimeout(() => {
+            settledCameraTimer = null;
+            lastHotspotLayout = Date.now();
+            reportCameraState();
+            layoutHotspotLabels();
+        }, 100);
+    }
 
     viewer.addEventListener("error", () => {
         viewer.style.display = "none";
@@ -444,7 +497,11 @@
         document.body.classList.toggle("high-contrast", highContrast);
         document.body.classList.toggle("large-labels", largerLabels);
         document.body.classList.toggle("screen-reader-mode", screenReaderMode);
-        viewer.interpolationDecay = reducedMotion ? 0 : 80;
+        viewer.interpolationDecay =
+            reducedMotion ? 0 :
+            requestedQuality === "low" ? 28 :
+            requestedQuality === "high" ? 42 :
+            34;
     }
 
     window.setRotationSpeed = function(degreesPerSecond) {
@@ -475,12 +532,42 @@
 
     window.zoomBy = function(factor) {
         const orbit = viewer.getCameraOrbit();
-        const nextRadius = Math.max(0.05, orbit.radius * Number(factor));
-        viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${nextRadius}m`;
-        viewer.jumpCameraToGoal();
+        if (!initialCameraRadius) initialCameraRadius = orbit.radius;
+        const minimumRadius = Math.max(0.05, initialCameraRadius / 3);
+        const maximumRadius = initialCameraRadius / 0.35;
+        const baseRadius = zoomGoalRadius || orbit.radius;
+        zoomGoalRadius = Math.max(
+            minimumRadius,
+            Math.min(maximumRadius, baseRadius * Number(factor))
+        );
+        if (!zoomAnimationFrame) {
+            zoomAnimationFrame = requestAnimationFrame(animateDampedZoom);
+        }
     };
 
+    function animateDampedZoom() {
+        zoomAnimationFrame = 0;
+        if (activePointers.size > 0 || !zoomGoalRadius) return;
+        const orbit = viewer.getCameraOrbit();
+        const difference = zoomGoalRadius - orbit.radius;
+        const nextRadius =
+            Math.abs(difference) < 0.001
+                ? zoomGoalRadius
+                : orbit.radius + difference * 0.2;
+        viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${nextRadius}m`;
+        viewer.jumpCameraToGoal();
+        if (Math.abs(difference) >= 0.001) {
+            zoomAnimationFrame = requestAnimationFrame(animateDampedZoom);
+        } else {
+            zoomGoalRadius = 0;
+            reportCameraState();
+        }
+    }
+
     window.resetView = function() {
+        zoomGoalRadius = 0;
+        if (zoomAnimationFrame) cancelAnimationFrame(zoomAnimationFrame);
+        zoomAnimationFrame = 0;
         viewer.cameraOrbit = "0deg 72deg auto";
         viewer.cameraTarget = "auto auto auto";
         viewer.fieldOfView = "auto";
@@ -500,6 +587,9 @@
         else if (degrees >= 45 && degrees < 135) orientation = "Right";
         else if (degrees >= 135 && degrees < 225) orientation = "Back";
         else if (degrees >= 225 && degrees < 315) orientation = "Left";
+        if (zoom === lastReportedZoom && orientation === lastReportedOrientation) return;
+        lastReportedZoom = zoom;
+        lastReportedOrientation = orientation;
         window.BiologyBridge.onCameraState(zoom, orientation);
     }
 
@@ -613,10 +703,27 @@
     window.addEventListener("resize", layoutHotspotLabels);
 
     viewer.addEventListener("pointerdown", event => {
-        pointerStart = { x: event.clientX, y: event.clientY, at: Date.now() };
+        activePointers.add(event.pointerId);
+        if (activePointers.size > 1) multiTouchGesture = true;
+        document.body.classList.add("camera-interacting");
+        pointerStart =
+            activePointers.size === 1
+                ? { x: event.clientX, y: event.clientY, at: Date.now() }
+                : null;
     });
 
     viewer.addEventListener("pointerup", event => {
+        const wasMultiTouch = multiTouchGesture;
+        activePointers.delete(event.pointerId);
+        if (activePointers.size === 0) {
+            multiTouchGesture = false;
+            document.body.classList.remove("camera-interacting");
+            scheduleSettledCameraWork();
+        }
+        if (wasMultiTouch) {
+            pointerStart = null;
+            return;
+        }
         if (!pointerStart) return;
         const movement = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
         pointerStart = null;
@@ -640,27 +747,70 @@
         }
     });
 
+    viewer.addEventListener("pointercancel", event => {
+        activePointers.delete(event.pointerId);
+        pointerStart = null;
+        if (activePointers.size === 0) {
+            multiTouchGesture = false;
+            document.body.classList.remove("camera-interacting");
+            scheduleSettledCameraWork();
+        }
+    });
+
     function identifyPartFromPoint(x, y) {
         if (!parts.length) return;
         const localX = x - viewer.getBoundingClientRect().left;
         const localY = y - viewer.getBoundingClientRect().top;
+        const surfaceHit =
+            typeof viewer.positionAndNormalFromPoint === "function"
+                ? viewer.positionAndNormalFromPoint(localX, localY)
+                : null;
         let closest = null;
         viewer.querySelectorAll(".hotspot[data-visible]").forEach((hotspot, index) => {
             const data = viewer.queryHotspot(hotspot.slot);
             if (!data || !data.facingCamera) return;
-            const distance = Math.hypot(
-                data.canvasPosition.x - localX,
-                data.canvasPosition.y - localY
-            );
+            const distance =
+                surfaceHit && data.position
+                    ? Math.hypot(
+                        data.position.x - surfaceHit.position.x,
+                        data.position.y - surfaceHit.position.y,
+                        data.position.z - surfaceHit.position.z
+                    )
+                    : Math.hypot(
+                        data.canvasPosition.x - localX,
+                        data.canvasPosition.y - localY
+                    );
             if (!closest || distance < closest.distance) {
                 closest = { index, distance };
             }
         });
-        if (!closest || closest.distance > 96) return;
+        if (!closest || (!surfaceHit && closest.distance > 110)) return;
         focusPart(closest.index);
         if (window.BiologyBridge) {
             window.BiologyBridge.onPartSelected(closest.index);
         }
+    }
+
+    function monitorRenderingPerformance() {
+        performanceSampleStartedAt = performance.now();
+        performanceSampleFrames = 0;
+        const sample = now => {
+            performanceSampleFrames++;
+            const elapsed = now - performanceSampleStartedAt;
+            if (elapsed < 2500) {
+                requestAnimationFrame(sample);
+                return;
+            }
+            const averageFrameMs = elapsed / Math.max(1, performanceSampleFrames);
+            if (averageFrameMs > 24) {
+                const ModelViewer = customElements.get("model-viewer");
+                if (ModelViewer) ModelViewer.minimumRenderScale = 0.3;
+                viewer.shadowIntensity = 0;
+            } else if (averageFrameMs < 18 && requestedQuality === "high") {
+                viewer.shadowIntensity = 0.7;
+            }
+        };
+        requestAnimationFrame(sample);
     }
 
     function focusFromPoint(x, y) {

@@ -6,6 +6,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
@@ -16,10 +18,13 @@ import com.indianservers.AIbiology.data.CatalogRefreshCoordinator
 import com.indianservers.AIbiology.data.ModelDownloadRecord
 import com.indianservers.AIbiology.data.ModelDownloadStatus
 import com.indianservers.AIbiology.data.ModelRepository
+import com.indianservers.AIbiology.data.RecentlyViewedItem
+import com.indianservers.AIbiology.data.RecentlyViewedStore
 import com.indianservers.AIbiology.databinding.FragmentHomeBinding
 import com.indianservers.AIbiology.ui.BiologyModelAdapter
 import com.indianservers.AIbiology.ui.DeviceProfile
 import com.indianservers.AIbiology.ui.TvFocus
+import java.time.Year
 
 class HomeFragment : Fragment() {
     private var _binding: FragmentHomeBinding? = null
@@ -41,6 +46,7 @@ class HomeFragment : Fragment() {
         configureLayout(isTelevision)
         configureActions(isTelevision)
         updateLibrarySummary()
+        updateRecentlyViewed()
         binding.homeVersion.text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
         CatalogRefreshCoordinator.status.observe(viewLifecycleOwner) { status ->
             binding.homeLibraryStatus.text = status.label
@@ -170,9 +176,45 @@ class HomeFragment : Fragment() {
             )
         }
         binding.homeLibraryButton.setOnClickListener { showAppLibrary() }
+        binding.homeShareButton.setOnClickListener { AppActions.shareApp(requireContext()) }
+        binding.homeMenuButton.setOnClickListener { anchor -> showAppMenu(anchor) }
         if (isTelevision) TvFocus.apply(binding.homeKnowledgeCheck, focusedScale = 1.02f)
         if (isTelevision) TvFocus.apply(binding.homeLibraryButton, focusedScale = 1.02f)
+        if (isTelevision) TvFocus.apply(binding.homeShareButton, focusedScale = 1.06f)
+        if (isTelevision) TvFocus.apply(binding.homeMenuButton, focusedScale = 1.06f)
         if (!isTelevision) binding.homeScroll.isFocusable = false
+    }
+
+    private fun showAppMenu(anchor: View) {
+        PopupMenu(requireContext(), anchor).apply {
+            menuInflater.inflate(R.menu.menu_main, menu)
+            setOnMenuItemClickListener { item ->
+                if (item.itemId == R.id.action_about) {
+                    showAbout()
+                    true
+                } else {
+                    false
+                }
+            }
+            show()
+        }
+    }
+
+    private fun showAbout() {
+        val message = buildString {
+            appendLine(getString(R.string.about_description))
+            appendLine()
+            appendLine(getString(R.string.about_disclaimer_title))
+            appendLine(getString(R.string.about_disclaimer))
+            appendLine()
+            appendLine(getString(R.string.about_copyright, Year.now().value))
+            append(getString(R.string.about_contact))
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.about_title)
+            .setMessage(message)
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     private fun showAppLibrary() {
@@ -183,7 +225,10 @@ class HomeFragment : Fragment() {
         if (downloaded.isEmpty()) {
             AlertDialog.Builder(requireContext())
                 .setTitle("App Library")
-                .setMessage("No downloaded 3D models are using device storage.")
+                .setMessage(
+                    "No downloaded 3D models are using device storage. " +
+                        "Open Models or Human Anatomy and download only the models you want."
+                )
                 .setPositiveButton("Done", null)
                 .show()
             return
@@ -191,63 +236,45 @@ class HomeFragment : Fragment() {
         val labels = downloaded.map {
             "${displayModelName(it)}\n${BiologyModelAdapter.formatBytes(it.fileSizeBytes)}"
         }.toTypedArray()
-        val dialog = AlertDialog.Builder(requireContext())
-            .setTitle("App Library")
-            .setMessage(
-                "${downloaded.size} downloaded models. Select one to remove it, " +
-                    "or clear all downloaded models."
-            )
-            .setItems(labels) { _, index -> confirmModelRemoval(downloaded[index]) }
-            .setNegativeButton("Close", null)
-            .setNeutralButton("Clear all", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                confirmClearLibrary(dialog)
+        val keepModel = BooleanArray(downloaded.size) { true }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Keep checked models")
+            .setMultiChoiceItems(labels, keepModel) { _, index, isChecked ->
+                keepModel[index] = isChecked
             }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save selection") { _, _ ->
+                saveLibrarySelection(downloaded, keepModel)
+            }
+            .show()
+    }
+
+    private fun saveLibrarySelection(
+        downloaded: List<ModelDownloadRecord>,
+        keepModel: BooleanArray
+    ) {
+        val removed = downloaded.filterIndexed { index, _ -> !keepModel[index] }
+        if (removed.isEmpty()) {
+            Toast.makeText(
+                requireContext(),
+                "All downloaded models were kept.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
         }
-        dialog.show()
-    }
-
-    private fun confirmModelRemoval(record: ModelDownloadRecord) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Remove ${displayModelName(record)}?")
-            .setMessage(
-                "The downloaded model will be deleted from this device. " +
-                    "You can download it again from its catalogue."
-            )
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Remove") { _, _ ->
-                val repository = ModelRepository(requireContext())
-                repository.remove(record.modelId, requireExplicitConfirmation = false)
-                repository.close()
-                updateLibrarySummary()
-                Toast.makeText(requireContext(), "Model removed.", Toast.LENGTH_SHORT).show()
-            }
-            .show()
-    }
-
-    private fun confirmClearLibrary(parent: AlertDialog) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Clear all downloads?")
-            .setMessage(
-                "All downloaded 3D models will be removed to free space. " +
-                    "Catalogue entries and online models remain available."
-            )
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Clear downloads") { _, _ ->
-                val repository = ModelRepository(requireContext())
-                val (count, bytes) = repository.removeAllDownloaded()
-                repository.close()
-                parent.dismiss()
-                updateLibrarySummary()
-                Toast.makeText(
-                    requireContext(),
-                    "Removed $count models and freed ${BiologyModelAdapter.formatBytes(bytes)}.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-            .show()
+        val repository = ModelRepository(requireContext())
+        removed.forEach {
+            repository.remove(it.modelId, requireExplicitConfirmation = false)
+        }
+        repository.close()
+        updateLibrarySummary()
+        val freedBytes = removed.sumOf(ModelDownloadRecord::fileSizeBytes)
+        Toast.makeText(
+            requireContext(),
+            "Kept ${downloaded.size - removed.size} models. " +
+                "Freed ${BiologyModelAdapter.formatBytes(freedBytes)}.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun displayModelName(record: ModelDownloadRecord): String =
@@ -274,9 +301,58 @@ class HomeFragment : Fragment() {
         repository.close()
     }
 
+    private fun updateRecentlyViewed() {
+        if (_binding == null) return
+        val items = RecentlyViewedStore(requireContext()).items()
+        binding.homeRecentList.removeAllViews()
+        binding.homeRecentSection.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        items.take(6).forEach { item ->
+            binding.homeRecentList.addView(createRecentItem(item))
+        }
+    }
+
+    private fun createRecentItem(item: RecentlyViewedItem): TextView =
+        TextView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(170.dp, 58.dp).apply {
+                marginEnd = 8.dp
+            }
+            background = requireContext().getDrawable(R.drawable.bg_part_row)
+            isClickable = true
+            isFocusable = true
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(13.dp, 7.dp, 13.dp, 7.dp)
+            text = item.title
+            textSize = 13f
+            setTextColor(requireContext().getColor(R.color.white))
+            contentDescription = "Resume ${item.title}"
+            setOnClickListener {
+                val arguments = Bundle().apply {
+                    putString(RecentlyViewedStore.ARG_MODEL_ID, item.modelId)
+                }
+                when (item.destination) {
+                    RecentlyViewedStore.DESTINATION_ANATOMY ->
+                        findNavController().navigate(
+                            R.id.action_HomeFragment_to_FourthFragment,
+                            arguments
+                        )
+                    else ->
+                        findNavController().navigate(
+                            R.id.action_HomeFragment_to_FirstFragment,
+                            arguments
+                        )
+                }
+            }
+            if (DeviceProfile.isTelevision(requireContext())) TvFocus.apply(this, 1.03f)
+        }
+
     override fun onResume() {
         super.onResume()
-        if (_binding != null) updateLibrarySummary()
+        if (_binding != null) {
+            updateLibrarySummary()
+            updateRecentlyViewed()
+        }
     }
 
     override fun onDestroyView() {
