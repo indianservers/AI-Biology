@@ -379,6 +379,65 @@
                         android:textColor="#FFC28D"
                         android:textSize="24sp" />
                 </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/lessonsModule"
+                    android:layout_width="match_parent"
+                    android:layout_height="116dp"
+                    android:layout_margin="6dp"
+                    android:background="@drawable/bg_home_module_selector"
+                    android:clickable="true"
+                    android:contentDescription="Biology Lessons from Grade 6 to postgraduate"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:background="@drawable/bg_home_icon_library"
+                        android:contentDescription="Lessons for Grade 6 through postgraduate"
+                        android:gravity="center"
+                        android:text="6–PG"
+                        android:textColor="#73E8C5"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Lessons"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:maxLines="2"
+                            android:text="Grade 6 to PG concepts explained in three simple phases"
+                            android:textColor="#91A6C5"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="36dp"
+                        android:layout_height="48dp"
+                        android:gravity="center"
+                        android:text=">"
+                        android:textColor="#73E8C5"
+                        android:textSize="24sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout

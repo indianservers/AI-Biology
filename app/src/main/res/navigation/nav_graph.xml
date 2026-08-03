@@ -23,6 +23,9 @@
         <action
             android:id="@+id/action_HomeFragment_to_FourthFragment"
             app:destination="@id/FourthFragment" />
+        <action
+            android:id="@+id/action_HomeFragment_to_LessonsFragment"
+            app:destination="@id/LessonsFragment" />
     </fragment>
 
     <fragment
@@ -61,4 +64,9 @@
         android:name="com.indianservers.AIbiology.FourthFragment"
         android:label="@string/fourth_fragment_label"
         tools:layout="@layout/fragment_fourth" />
+    <fragment
+        android:id="@+id/LessonsFragment"
+        android:name="com.indianservers.AIbiology.LessonsFragment"
+        android:label="@string/lessons_fragment_label"
+        tools:layout="@layout/fragment_lessons" />
 </navigation>

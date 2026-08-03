@@ -19,6 +19,7 @@
     <string name="second_fragment_label">Library</string>
     <string name="third_fragment_label">Microscopy</string>
     <string name="fourth_fragment_label">Anatomy</string>
+    <string name="lessons_fragment_label">Lessons</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
     <string name="model_browser_title">Biology 3D Models</string>

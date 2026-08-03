@@ -98,7 +98,8 @@ class HomeFragment : Fragment() {
             binding.exploreModelsModule,
             binding.humanAnatomyModule,
             binding.microscopeModule,
-            binding.infographicsModule
+            binding.infographicsModule,
+            binding.lessonsModule
         )
         cards.forEach { (it.parent as? ViewGroup)?.removeView(it) }
         binding.homeModuleGrid.removeAllViews()
@@ -168,6 +169,9 @@ class HomeFragment : Fragment() {
         }
         binding.infographicsModule.setOnClickListener {
             findNavController().navigate(R.id.action_HomeFragment_to_SecondFragment)
+        }
+        binding.lessonsModule.setOnClickListener {
+            findNavController().navigate(R.id.action_HomeFragment_to_LessonsFragment)
         }
         binding.homeKnowledgeCheck.setOnClickListener {
             findNavController().navigate(
